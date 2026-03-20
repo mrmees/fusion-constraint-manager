@@ -3,7 +3,6 @@
 A Fusion 360 add-in for viewing and selectively deleting sketch constraints. Select one or more sketch entities, see all their geometric constraints in a table, and delete the ones you don't want — without hunting through overlapping constraint icons in the viewport.
 
 ![Constraint Manager screenshot](docs/images/screenshot.png)
-<!-- TODO: Add screenshot to docs/images/screenshot.png -->
 
 ## Features
 
