@@ -274,3 +274,64 @@ def test_format_related_dash():
     from ConstraintManager.commands.constraint_manager.constraint_engine import _format_related
     assert _format_related("--", lambda e: 0) == "--"
     assert _format_related([], lambda e: 0) == "--"
+
+
+# --- Deletion tests ---
+
+class MockDeletableConstraint(MockConstraint):
+    """Mock constraint that tracks deleteMe() calls."""
+
+    def __init__(self, object_type, isDeletable=True, **kwargs):
+        super().__init__(object_type, isDeletable, **kwargs)
+        self.deleted = False
+
+    def deleteMe(self):
+        if not self.isDeletable:
+            return False
+        self.deleted = True
+        self.isValid = False
+        return True
+
+
+def test_delete_single_constraint():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import delete_constraints
+    c = MockDeletableConstraint("HorizontalConstraint")
+    results = delete_constraints([c])
+    assert c.deleted is True
+    assert results["deleted"] == 1
+    assert results["failed"] == 0
+
+def test_delete_skips_non_deletable():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import delete_constraints
+    c = MockDeletableConstraint("HorizontalConstraint", isDeletable=False)
+    results = delete_constraints([c])
+    assert c.deleted is False
+    assert results["deleted"] == 0
+    assert results["skipped"] == 1
+
+def test_delete_skips_invalid():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import delete_constraints
+    c = MockDeletableConstraint("HorizontalConstraint")
+    c.isValid = False
+    results = delete_constraints([c])
+    assert c.deleted is False
+    assert results["skipped"] == 1
+
+def test_delete_batch_reverse_order():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import delete_constraints
+    deletion_order = []
+
+    class OrderedConstraint(MockDeletableConstraint):
+        def __init__(self, name, **kwargs):
+            super().__init__("HorizontalConstraint", **kwargs)
+            self.name = name
+
+        def deleteMe(self):
+            deletion_order.append(self.name)
+            return super().deleteMe()
+
+    c1 = OrderedConstraint("first")
+    c2 = OrderedConstraint("second")
+    c3 = OrderedConstraint("third")
+    delete_constraints([c1, c2, c3])
+    assert deletion_order == ["third", "second", "first"]

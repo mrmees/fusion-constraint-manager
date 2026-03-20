@@ -184,6 +184,41 @@ def _build_constraint_info(constraint, selected_entity, index_finder):
     }
 
 
+def delete_constraints(constraints):
+    """Delete a list of constraints in reverse order.
+
+    Checks isDeletable and isValid before each deletion. Logs and continues
+    on failure — never aborts the batch.
+
+    Args:
+        constraints: List of Fusion constraint objects (in table display order).
+
+    Returns:
+        Dict with keys: 'deleted' (int), 'failed' (int), 'skipped' (int).
+    """
+    deleted = 0
+    failed = 0
+    skipped = 0
+
+    for constraint in reversed(constraints):
+        if not getattr(constraint, "isValid", False):
+            _log.info("Skipping invalid constraint")
+            skipped += 1
+            continue
+        if not getattr(constraint, "isDeletable", False):
+            _log.info("Skipping non-deletable constraint: %s", constraint.objectType)
+            skipped += 1
+            continue
+        try:
+            constraint.deleteMe()
+            deleted += 1
+        except Exception as e:
+            _log.error("Failed to delete constraint: %s", e)
+            failed += 1
+
+    return {"deleted": deleted, "failed": failed, "skipped": skipped}
+
+
 def _format_related(related, index_finder):
     """Format the related entity result into a display string.
 
