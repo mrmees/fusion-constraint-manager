@@ -23,6 +23,9 @@ A 100% Vibe Coded Fusion 360 add-in for viewing and selectively deleting sketch 
    ```
 4. In Fusion: **Tools > Scripts & Add-Ins > Add-Ins** tab
 5. Find **Constraint Manager** and click **Run**
+
+   ![Hotkey Assignment](docs/images/hotkey_assignment.png)
+
 6. Optionally check **Run on Startup** to load it automatically
 
 ## Usage
