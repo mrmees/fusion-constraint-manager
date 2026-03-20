@@ -20,14 +20,15 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_NAME = "Constraint Manager"
+CMD_VERSION = "0.3"
+CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
 
 # Shared state between InputChangedHandler and ExecuteHandler.
-# inputChanged queues deletions here; execute performs them.
+# inputChanged queues deletions here; execute performs them and refreshes.
 _pending_deletes = []
-_keep_dialog_open = False
+_selected_entity = None  # Preserved across execute so we can refresh the table
 
 
 def start(app, ui):
@@ -88,6 +89,7 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
             cmd = args.command
+            # Only Close — no Cancel, no undo history to preserve
             cmd.okButtonText = "Close"
             cmd.isCancelButtonVisible = False
 
@@ -121,12 +123,10 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             table.maximumVisibleRows = 10
             table.isEnabled = True
 
-            # Delete toolbar button on table (starts disabled)
-            del_btn = inputs.addBoolValueInput(
+            # Delete Selected button — below the table, next to Close
+            inputs.addBoolValueInput(
                 "deleteBtn", "Delete Selected", False, "", False
             )
-            del_btn.isEnabled = False
-            table.addToolbarCommandInput(del_btn)
 
             # Wire command-instance event handlers
             input_changed = InputChangedHandler()
@@ -216,6 +216,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
     def _on_entity_changed(self, inputs):
         """Rebuild the constraint table for the newly selected entity."""
+        global _selected_entity
         entity_select = inputs.itemById("entitySelect")
         table = inputs.itemById("constraintTable")
 
@@ -225,10 +226,18 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
         if entity_select.selectionCount == 0:
             self._current_constraints = []
+            _selected_entity = None
             self._update_delete_state(inputs)
             return
 
         selected = entity_select.selection(0).entity
+        _selected_entity = selected
+
+        self._populate_table(inputs, selected)
+
+    def _populate_table(self, inputs, selected):
+        """Enumerate constraints for an entity and fill the table."""
+        table = inputs.itemById("constraintTable")
 
         # Enumerate constraints
         infos = constraint_engine.enumerate_constraints(
@@ -296,7 +305,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
     def _on_delete_requested(self, args):
         """Queue checked constraints for deletion, then trigger execute."""
-        global _pending_deletes, _keep_dialog_open
+        global _pending_deletes
         inputs = args.inputs
         table = inputs.itemById("constraintTable")
 
@@ -315,7 +324,6 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
         # Queue for execute handler — inputChanged must not modify the model
         _pending_deletes = to_delete
-        _keep_dialog_open = True
 
         # Trigger execute, which will perform the actual deletion.
         # doExecute(False) means "don't terminate the command after execute".
@@ -323,24 +331,90 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
 
 class ExecuteHandler(adsk.core.CommandEventHandler):
-    """Performs queued deletions (model changes must happen here, not in inputChanged)."""
+    """Performs queued deletions and refreshes the table.
+
+    Model changes must happen here, not in inputChanged.
+    After doExecute(False), the command stays alive and we rebuild the table.
+    """
 
     def notify(self, args):
-        global _pending_deletes, _keep_dialog_open
+        global _pending_deletes, _selected_entity
         try:
-            if _pending_deletes:
-                result = constraint_engine.delete_constraints(_pending_deletes)
-                _log.info(
-                    "Deleted %d, failed %d, skipped %d",
-                    result["deleted"], result["failed"], result["skipped"],
-                )
-                _pending_deletes = []
+            if not _pending_deletes:
+                return
 
-            if _keep_dialog_open:
-                _keep_dialog_open = False
-                # After execute, the command re-runs commandCreated to rebuild the dialog.
-                # The dialog will re-open fresh — user selects entity again to see updated state.
-                # This is the expected Fusion pattern for commands that modify and continue.
+            # Perform the actual deletions
+            result = constraint_engine.delete_constraints(_pending_deletes)
+            _log.info(
+                "Deleted %d, failed %d, skipped %d",
+                result["deleted"], result["failed"], result["skipped"],
+            )
+            _pending_deletes = []
+
+            # Refresh the table with the entity that was selected
+            cmd = args.command
+            inputs = cmd.commandInputs
+            table = inputs.itemById("constraintTable")
+
+            # Clear existing table rows
+            for i in range(table.rowCount - 1, -1, -1):
+                table.deleteRow(i)
+
+            # Check if the entity is still valid after deletion
+            if _selected_entity and hasattr(_selected_entity, "isValid") and _selected_entity.isValid:
+                # Re-enumerate and rebuild the table
+                infos = constraint_engine.enumerate_constraints(
+                    _selected_entity, index_finder=_find_entity_index
+                )
+                InputChangedHandler._current_constraints = infos or []
+
+                if not infos:
+                    msg = inputs.addStringValueInput(
+                        "noConstraints", "", "No constraints found"
+                    )
+                    msg.isReadOnly = True
+                    table.addCommandInput(msg, 0, 0)
+                else:
+                    for i, info in enumerate(infos):
+                        row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+
+                        cb = row_inputs.addBoolValueInput(
+                            f"check_{i}", "", True, "", False
+                        )
+                        cb.isEnabled = info["is_deletable"]
+
+                        type_display = info["type_name"]
+                        if not info["is_deletable"]:
+                            type_display = f"\U0001F512 {type_display}"
+                        type_input = row_inputs.addStringValueInput(
+                            f"type_{i}", "", type_display
+                        )
+                        type_input.isReadOnly = True
+
+                        related_display = info["related_label"]
+                        if not info["is_deletable"] and related_display != "--":
+                            related_display = f"{related_display} (locked)"
+                        related_input = row_inputs.addStringValueInput(
+                            f"related_{i}", "", related_display
+                        )
+                        related_input.isReadOnly = True
+
+                        table.addCommandInput(cb, i, 0)
+                        table.addCommandInput(type_input, i, 1)
+                        table.addCommandInput(related_input, i, 2)
+            else:
+                # Entity was invalidated by cascading deletes
+                InputChangedHandler._current_constraints = []
+                _selected_entity = None
+                entity_select = inputs.itemById("entitySelect")
+                if entity_select:
+                    entity_select.clearSelection()
+
+            # Update delete button state
+            del_btn = inputs.itemById("deleteBtn")
+            if del_btn:
+                del_btn.isEnabled = False
+
         except:
             _log.error("Execute error: %s", traceback.format_exc())
 
@@ -349,10 +423,10 @@ class DestroyHandler(adsk.core.CommandEventHandler):
     """Fires when command is destroyed — clean up handler references."""
 
     def notify(self, args):
-        global _cmd_handlers, _pending_deletes, _keep_dialog_open
+        global _cmd_handlers, _pending_deletes, _selected_entity
         _cmd_handlers = []
         _pending_deletes = []
-        _keep_dialog_open = False
+        _selected_entity = None
 
 
 def _find_entity_index(entity):
