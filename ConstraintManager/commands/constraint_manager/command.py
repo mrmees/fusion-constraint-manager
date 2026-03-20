@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.5.3"
+CMD_VERSION = "0.5.4"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -90,7 +90,7 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         try:
             cmd = args.command
             cmd.okButtonText = "Close"
-            # Cancel seems to be forced by Fusion — leave it visible
+            cmd.isCancelButtonVisible = False
 
             # Verify active sketch edit mode
             design = adsk.fusion.Design.cast(_app.activeProduct)
