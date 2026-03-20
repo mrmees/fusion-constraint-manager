@@ -1,7 +1,7 @@
 # Fusion Sketch Constraint Manager — Design Spec
 
 **Date:** 2026-03-20
-**Status:** Draft (revised per Codex review)
+**Status:** v1.0 Implemented
 **Author:** Matthew Mees + Claude
 
 ---
@@ -28,7 +28,7 @@ A Fusion add-in that provides a command-based constraint manager. The user selec
 7. User clicks "Delete Selected" in the table toolbar — constraints are deleted, table refreshes
 8. User can change entity selection at any time — table refreshes
 9. User can repeat select/delete as many times as needed
-10. User clicks **Close** to dismiss the dialog
+10. User clicks **Delete Selected** to remove checked constraints and close, or **Cancel** to close without deleting
 
 ## Architecture: Approach A — Command + TableCommandInput
 
@@ -44,38 +44,38 @@ A standard Fusion command dialog using native `CommandInputs`. Chosen over HTML 
 
 ## Dialog Layout
 
-Single-panel, compact layout:
+Single-panel, compact layout with multi-entity selection and a 4-column table:
 
 ```
-+------------------------------------------+
-|  CONSTRAINT MANAGER                       |
-+------------------------------------------+
-|  Select Entity:                           |
-|  [ Line #1 (SketchLine)            ]      |
-+------------------------------------------+
-|  CONSTRAINTS (5 found)     [Delete Selected]
-|  +----+---------------+----------------+  |
-|  | [] | Type          | Related To     |  |
-|  +----+---------------+----------------+  |
-|  | [x]| Coincident    | Point #3       |  |
-|  | [] | Horizontal    | --             |  |
-|  | [] | Parallel      | Line #3        |  |
-|  | [] | Equal         | Line #5        |  |
-|  | lock| Tangent      | Arc #2 (locked)|  |
-|  +----+---------------+----------------+  |
-+------------------------------------------+
-|                              [ Close ]    |
-+------------------------------------------+
++--------------------------------------------------+
+|  CONSTRAINT MANAGER                               |
++--------------------------------------------------+
+|  Select Entity:                                   |
+|  [ Line #1, Arc #2 (2 selected)            ]      |
++--------------------------------------------------+
+|  CONSTRAINTS (5 found)         [Delete Selected]  |
+|  +----+----------+---------------+-------------+  |
+|  | [] | Entity   | Type          | Related To  |  |
+|  +----+----------+---------------+-------------+  |
+|  | [x]| Line #1  | Coincident    | Point #3    |  |
+|  | [] | Line #1  | Horizontal    | --          |  |
+|  | [] | Arc #2   | Tangent       | Line #3     |  |
+|  | [] | Arc #2   | Equal         | Arc #4      |  |
+|  | lock| Arc #2  | Fix           | --  (locked)|  |
+|  +----+----------+---------------+-------------+  |
++--------------------------------------------------+
+|                           [Delete Selected][Cancel]
++--------------------------------------------------+
 ```
 
-**Note on Close vs OK/Cancel:** Since deletions happen immediately when the user clicks "Delete Selected" (not on OK), the traditional OK/Cancel pattern is misleading. We use a single **Close** button. This design assumes undo works for `inputChanged`-driven deletions — **if validation shows it doesn't, the interaction model must be restructured** (see Undo Contract section). Undo would then be available via Fusion's native Ctrl+Z after closing.
+**Note on OK/Cancel:** Uses the standard Fusion OK/Cancel pattern — OK button relabeled to "Delete Selected". Deletions occur in the `execute` handler (not `inputChanged`) and therefore receive proper Fusion undo support.
 
 ### Command Inputs
 
 | Input | Type | Purpose |
 |-------|------|---------|
-| `entitySelect` | `SelectionCommandInput` | User picks a sketch entity. Filters: `SketchCurves`, `SketchPoints` (SketchCurves covers lines, arcs, circles, ellipses, splines). Limit: 1. Set `isUseCurrentSelections = False` to avoid inheriting stale selections. |
-| `constraintTable` | `TableCommandInput` | Displays constraints. 3 columns: checkbox (`BoolValueCommandInput` per row), type (`StringValueCommandInput`), related entity (`StringValueCommandInput`). "Delete Selected" action placed via `addToolbarCommandInput` on the table's native toolbar. See **Table Checkbox Strategy** below. |
+| `entitySelect` | `SelectionCommandInput` | User picks one or more sketch entities. Filters: `SketchCurves`, `SketchPoints` (SketchCurves covers lines, arcs, circles, ellipses, splines). Limit: unlimited (0). Set `isUseCurrentSelections = False` to avoid inheriting stale selections. |
+| `constraintTable` | `TableCommandInput` | Displays constraints. 4 columns: checkbox (`BoolValueCommandInput` per row), entity (`StringValueCommandInput`), type (`StringValueCommandInput`), related entity (`StringValueCommandInput`). "Delete Selected" action placed via `addToolbarCommandInput` on the table's native toolbar. See **Table Checkbox Strategy** below. |
 
 ### Highlighting (v1: Deferred)
 
@@ -182,6 +182,8 @@ Undo behavior for deletions triggered inside `inputChanged` is underdocumented i
 - **Not acceptable:** No undo at all. If testing reveals this, move deletion logic into the `execute` handler with a queued-deletion model.
 
 This must be tested early in implementation. The Close-only dialog design depends on undo working — without it, users have no way to recover from accidental deletions.
+
+**Resolved:** inputChanged cannot modify the model — Fusion discards those changes. Deletion happens in the `execute` handler using `entityToken` re-resolution via `Design.findEntityByToken()`. This gives proper undo support as a side effect.
 
 ### Command State Rules
 
@@ -293,7 +295,7 @@ Both lists are module-level. Never store handlers on the command object itself �
 ### Must validate before full implementation (blockers)
 
 1. **TableCommandInput checkbox support** — The entire v1 UX depends on `BoolValueCommandInput` working inside `TableCommandInput` cells. Build a minimal test command first. Fallbacks defined in Table Checkbox Strategy section.
-2. **Undo granularity in `inputChanged`** — The Close-only dialog design depends on undo working. Test whether `deleteMe()` calls inside `inputChanged` produce undo steps. If not, must restructure around `execute` handler. See Undo Contract section.
+2. ~~**Undo granularity in `inputChanged`**~~ — **RESOLVED.** inputChanged is for UI only. Model changes in execute get proper undo. entityToken + findEntityByToken() is required to re-resolve constraint objects that go stale between inputChanged and execute.
 3. **Dimension constraint entity properties** — Geometric constraints confirmed via `SketchEntity.geometricConstraints`. Dimension subclass properties from `SketchEntity.sketchDimensions` need verification. If unverifiable, dimensions are deferred — not a blocker for geometric-only v1.
 
 ### Should validate during implementation (non-blockers)
@@ -322,6 +324,16 @@ Both lists are module-level. Never store handlers on the command object itself �
 - Custom highlight colors
 - Keyboard shortcut registration
 - Persistent preferences or settings
+
+## Lessons Learned (Implementation)
+
+- `inputChanged` must NOT modify the model — Fusion silently discards those changes. All model mutations go in `execute` or `executePreview`.
+- Constraint objects enumerated in `inputChanged` go stale by the time `execute` fires. Store `entityToken` strings and re-resolve via `Design.findEntityByToken()` in execute.
+- Class-level attributes on event handler classes do NOT survive between events. Use module-level globals for shared state.
+- `isCancelButtonVisible = False` does not work in Fusion — Cancel button appears regardless.
+- `TableCommandInput.maximumVisibleRows` minimum value is 3, not 1.
+- `BoolValueCommandInput` name parameter serves as both the form label AND the button text — no way to have button text without a side label except `isFullWidth = True`.
+- Fusion caches Python modules aggressively — clearing `__pycache__` and restarting Fusion is often required after updates.
 
 ## Future Enhancements
 

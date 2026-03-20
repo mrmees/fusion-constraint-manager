@@ -20,8 +20,8 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "1.0"
-CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
+CMD_VERSION = "1.1"
+CMD_NAME = "Constraint Manager"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
 
@@ -223,8 +223,9 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             _current_constraints = []
             return
 
-        # Enumerate constraints across all selected entities
+        # Enumerate constraints across all selected entities, deduplicate by token
         all_infos = []
+        seen_tokens = set()
         for sel_idx in range(entity_select.selectionCount):
             entity = entity_select.selection(sel_idx).entity
             entity_index = _find_entity_index(entity)
@@ -234,6 +235,11 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
                 entity, index_finder=_find_entity_index
             )
             for info in infos:
+                token = info.get("entity_token")
+                if token and token in seen_tokens:
+                    continue  # Skip duplicate constraint
+                if token:
+                    seen_tokens.add(token)
                 info["source_label"] = entity_label
                 all_infos.append(info)
 
@@ -247,8 +253,24 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             msg.isVisible = True
             return
 
+        # Column headers
+        row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+        hdr_cb = row_inputs.addStringValueInput("hdr_cb", "", "")
+        hdr_cb.isReadOnly = True
+        hdr_entity = row_inputs.addStringValueInput("hdr_entity", "", "Entity")
+        hdr_entity.isReadOnly = True
+        hdr_type = row_inputs.addStringValueInput("hdr_type", "", "Type")
+        hdr_type.isReadOnly = True
+        hdr_related = row_inputs.addStringValueInput("hdr_related", "", "Related To")
+        hdr_related.isReadOnly = True
+        table.addCommandInput(hdr_cb, 0, 0)
+        table.addCommandInput(hdr_entity, 0, 1)
+        table.addCommandInput(hdr_type, 0, 2)
+        table.addCommandInput(hdr_related, 0, 3)
+
         # Populate table rows: checkbox | entity | type | related
         for i, info in enumerate(all_infos):
+            row = i + 1  # offset by header row
             row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
 
             cb = row_inputs.addBoolValueInput(
@@ -280,21 +302,21 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             )
             related_input.isReadOnly = True
 
-            table.addCommandInput(cb, i, 0)
-            table.addCommandInput(entity_input, i, 1)
-            table.addCommandInput(type_input, i, 2)
-            table.addCommandInput(related_input, i, 3)
+            table.addCommandInput(cb, row, 0)
+            table.addCommandInput(entity_input, row, 1)
+            table.addCommandInput(type_input, row, 2)
+            table.addCommandInput(related_input, row, 3)
 
         _current_constraints = all_infos
 
     def _on_select_all(self, inputs):
-        """Check all deletable constraint checkboxes."""
+        """Check all deletable constraint checkboxes (skip header row)."""
         table = inputs.itemById("constraintTable")
-        if not table:
+        if not table or table.rowCount < 2:
             return
-        for i in range(table.rowCount):
+        for i in range(1, table.rowCount):  # Skip row 0 (header)
             cb = table.getInputAtPosition(i, 0)
-            if cb and cb.isEnabled:
+            if cb and hasattr(cb, "value") and cb.isEnabled:
                 cb.value = True
 
 
@@ -314,14 +336,16 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
             if not constraints or not table:
                 return
 
-            # Collect tokens of checked constraints
+            # Collect tokens of checked constraints (skip row 0 = header)
             tokens_to_delete = []
-            for i in range(table.rowCount):
+            for i in range(1, table.rowCount):
                 cb = table.getInputAtPosition(i, 0)
-                if cb and cb.value:
-                    token = constraints[i].get("entity_token")
-                    if token:
-                        tokens_to_delete.append(token)
+                if cb and hasattr(cb, "value") and cb.value:
+                    constraint_idx = i - 1  # offset for header row
+                    if constraint_idx < len(constraints):
+                        token = constraints[constraint_idx].get("entity_token")
+                        if token:
+                            tokens_to_delete.append(token)
 
             if not tokens_to_delete:
                 return
