@@ -168,13 +168,13 @@ def _build_constraint_info(constraint, selected_entity, index_finder):
     if is_known:
         type_name = get_constraint_type_name(constraint.objectType)
         is_deletable = getattr(constraint, "isDeletable", False)
+        related = resolve_related_entity(constraint, selected_entity)
+        related_label = _format_related(related, index_finder)
     else:
         type_name = f"Unknown ({type_name_raw})"
         is_deletable = False
+        related_label = "--"
         _log.warning("Unknown constraint type: %s", constraint.objectType)
-
-    related = resolve_related_entity(constraint, selected_entity)
-    related_label = _format_related(related, index_finder)
 
     return {
         "constraint": constraint,
