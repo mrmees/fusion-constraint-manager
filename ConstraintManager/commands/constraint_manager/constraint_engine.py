@@ -4,6 +4,10 @@ No Fusion UI imports (adsk.core UI classes). Takes Fusion API model objects
 as arguments, returns plain data structures.
 """
 
+import logging
+
+_log = logging.getLogger(__name__)
+
 # objectType suffix -> display prefix
 _ENTITY_TYPE_MAP = {
     "SketchLine": "Line",
@@ -48,3 +52,78 @@ def get_constraint_type_name(object_type):
     if name.endswith("Constraint"):
         name = name[: -len("Constraint")]
     return name
+
+
+# Constraint type -> (property names referencing entities)
+_CONSTRAINT_ENTITY_PROPS = {
+    "HorizontalConstraint": ("line",),
+    "VerticalConstraint": ("line",),
+    "FixConstraint": ("entity",),
+    "ParallelConstraint": ("lineOne", "lineTwo"),
+    "PerpendicularConstraint": ("lineOne", "lineTwo"),
+    "CollinearConstraint": ("lineOne", "lineTwo"),
+    "CoincidentConstraint": ("point", "entity"),
+    "EqualConstraint": ("curveOne", "curveTwo"),
+    "TangentConstraint": ("curveOne", "curveTwo"),
+    "SmoothConstraint": ("curveOne", "curveTwo"),
+    "ConcentricConstraint": ("entityOne", "entityTwo"),
+    "MidPointConstraint": ("point", "midPointCurve"),
+    "HorizontalPointsConstraint": ("pointOne", "pointTwo"),
+    "VerticalPointsConstraint": ("pointOne", "pointTwo"),
+    "SymmetryConstraint": ("entityOne", "entityTwo", "symmetryLine"),
+}
+
+
+def resolve_related_entity(constraint, selected_entity):
+    """Identify the 'other' entity/entities in a constraint relative to selected_entity.
+
+    Returns:
+        '--' for single-entity constraints or unknown types.
+        The other entity object for two-entity constraints.
+        A list of other entity objects for three+ entity constraints (Symmetry).
+    """
+    type_name = constraint.objectType.split("::")[-1]
+
+    if type_name == "OffsetConstraint":
+        return _resolve_offset(constraint, selected_entity)
+
+    props = _CONSTRAINT_ENTITY_PROPS.get(type_name)
+    if props is None:
+        _log.warning("Unknown constraint type: %s", constraint.objectType)
+        return "--"
+
+    if len(props) == 1:
+        return "--"
+
+    referenced = []
+    for prop in props:
+        val = getattr(constraint, prop, None)
+        if val is not None:
+            referenced.append(val)
+
+    # Use == not 'is' — Fusion may return different wrapper objects for the same entity
+    others = [e for e in referenced if e != selected_entity]
+
+    if len(others) == 0:
+        return "--"
+    if len(others) == 1:
+        return others[0]
+    return others
+
+
+def _resolve_offset(constraint, selected_entity):
+    """Resolve related entities for Offset constraints (collection-based)."""
+    try:
+        parent_curves = constraint.parentCurves
+        child_curves = constraint.childCurves
+    except AttributeError:
+        return "--"
+
+    parent_list = [parent_curves.item(i) for i in range(parent_curves.count)]
+    child_list = [child_curves.item(i) for i in range(child_curves.count)]
+
+    if selected_entity in parent_list:
+        return child_list if child_list else "--"
+    if selected_entity in child_list:
+        return parent_list if parent_list else "--"
+    return "--"

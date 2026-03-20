@@ -87,3 +87,89 @@ def test_constraint_type_strips_suffix():
     from ConstraintManager.commands.constraint_manager.constraint_engine import get_constraint_type_name
     assert get_constraint_type_name("adsk::fusion::PerpendicularConstraint") == "Perpendicular"
     assert get_constraint_type_name("adsk::fusion::TangentConstraint") == "Tangent"
+
+
+# --- Related entity resolution tests ---
+
+class MockConstraint:
+    """Mock for a geometric constraint."""
+
+    def __init__(self, object_type, isDeletable=True, **entity_refs):
+        self.objectType = f"adsk::fusion::{object_type}"
+        self.isDeletable = isDeletable
+        self.isValid = True
+        for k, v in entity_refs.items():
+            setattr(self, k, v)
+
+
+def test_resolve_single_entity_horizontal():
+    """Horizontal constraint has one entity — related should be '--'."""
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    selected = _make_entity("SketchLine", index=0)
+    constraint = MockConstraint("HorizontalConstraint", line=selected)
+    result = resolve_related_entity(constraint, selected)
+    assert result == "--"
+
+def test_resolve_two_entity_parallel():
+    """Parallel: return the entity that isn't the selected one."""
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    line_a = _make_entity("SketchLine", index=0)
+    line_b = _make_entity("SketchLine", index=3)
+    constraint = MockConstraint("ParallelConstraint", lineOne=line_a, lineTwo=line_b)
+    result = resolve_related_entity(constraint, line_a)
+    assert result is line_b
+
+def test_resolve_two_entity_selected_is_second():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    line_a = _make_entity("SketchLine", index=0)
+    line_b = _make_entity("SketchLine", index=3)
+    constraint = MockConstraint("ParallelConstraint", lineOne=line_a, lineTwo=line_b)
+    result = resolve_related_entity(constraint, line_b)
+    assert result is line_a
+
+def test_resolve_coincident():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    point = _make_entity("SketchPoint", index=0)
+    line = _make_entity("SketchLine", index=1)
+    constraint = MockConstraint("CoincidentConstraint", point=point, entity=line)
+    result = resolve_related_entity(constraint, point)
+    assert result is line
+
+def test_resolve_fix_constraint():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    entity = _make_entity("SketchPoint", index=0)
+    constraint = MockConstraint("FixConstraint", entity=entity)
+    result = resolve_related_entity(constraint, entity)
+    assert result == "--"
+
+def test_resolve_symmetry_selected_is_entity_one():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    e1 = _make_entity("SketchLine", index=0)
+    e2 = _make_entity("SketchLine", index=1)
+    sym_line = _make_entity("SketchLine", index=2)
+    constraint = MockConstraint("SymmetryConstraint", entityOne=e1, entityTwo=e2, symmetryLine=sym_line)
+    result = resolve_related_entity(constraint, e1)
+    assert isinstance(result, list)
+    assert e2 in result
+    assert sym_line in result
+
+def test_resolve_unknown_type():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    entity = _make_entity("SketchLine", index=0)
+    constraint = MockConstraint("SomeNewConstraint")
+    result = resolve_related_entity(constraint, entity)
+    assert result == "--"
+
+def test_resolve_offset_selected_in_parent():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import resolve_related_entity
+    parent = _make_entity("SketchLine", index=0)
+    child1 = _make_entity("SketchLine", index=1)
+    child2 = _make_entity("SketchArc", index=0)
+    constraint = MockConstraint("OffsetConstraint")
+    constraint.parentCurves = MockCollection([parent])
+    constraint.childCurves = MockCollection([child1, child2])
+    result = resolve_related_entity(constraint, parent)
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert child1 in result
+    assert child2 in result
