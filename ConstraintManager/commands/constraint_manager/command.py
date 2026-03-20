@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.4"
+CMD_VERSION = "0.5"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -89,9 +89,8 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
             cmd = args.command
-            # Only Close — no Cancel, no undo history to preserve
             cmd.okButtonText = "Close"
-            cmd.isCancelButtonVisible = False
+            # Cancel seems to be forced by Fusion — leave it visible
 
             # Verify active sketch edit mode
             design = adsk.fusion.Design.cast(_app.activeProduct)
@@ -124,11 +123,10 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             table.minimumVisibleRows = 6
             table.isEnabled = True
 
-            # Delete Selected button — isFullWidth removes the side label
-            del_btn = inputs.addBoolValueInput(
+            # Delete Selected button
+            inputs.addBoolValueInput(
                 "deleteBtn", "Delete Selected", False, "", False
             )
-            del_btn.isFullWidth = True
 
             # Wire command-instance event handlers
             input_changed = InputChangedHandler()
@@ -246,13 +244,20 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             selected, index_finder=_find_entity_index
         )
 
+        # Remove old "no constraints" message if present
+        old_msg = inputs.itemById("noConstraints")
+        if old_msg:
+            old_msg.isVisible = False
+
         if not infos:
             self._current_constraints = []
-            msg = inputs.addStringValueInput(
-                "noConstraints", "", "No constraints found"
-            )
-            msg.isReadOnly = True
-            table.addCommandInput(msg, 0, 0)
+            # Show message outside the table so it's not crammed into a cell
+            msg = inputs.itemById("noConstraints")
+            if not msg:
+                msg = inputs.addTextBoxCommandInput(
+                    "noConstraints", "", "No constraints found", 1, True
+                )
+            msg.isVisible = True
             self._update_delete_state(inputs)
             return
 
@@ -370,12 +375,18 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 )
                 InputChangedHandler._current_constraints = infos or []
 
+                # Hide/show "no constraints" message
+                old_msg = inputs.itemById("noConstraints")
+                if old_msg:
+                    old_msg.isVisible = False
+
                 if not infos:
-                    msg = inputs.addStringValueInput(
-                        "noConstraints", "", "No constraints found"
-                    )
-                    msg.isReadOnly = True
-                    table.addCommandInput(msg, 0, 0)
+                    msg = inputs.itemById("noConstraints")
+                    if not msg:
+                        msg = inputs.addTextBoxCommandInput(
+                            "noConstraints", "", "No constraints found", 1, True
+                        )
+                    msg.isVisible = True
                 else:
                     for i, info in enumerate(infos):
                         row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
