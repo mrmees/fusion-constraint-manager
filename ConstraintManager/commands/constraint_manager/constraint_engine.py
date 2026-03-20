@@ -127,3 +127,81 @@ def _resolve_offset(constraint, selected_entity):
     if selected_entity in child_list:
         return parent_list if parent_list else "--"
     return "--"
+
+
+def enumerate_constraints(entity, index_finder, include_dimensions=False):
+    """Enumerate all geometric constraints on an entity, returning display-ready info.
+
+    Args:
+        entity: A Fusion SketchEntity with .geometricConstraints property.
+        index_finder: Callable(entity) -> int. Resolves an entity's collection index.
+        include_dimensions: If True, also enumerate .sketchDimensions (v1: disabled).
+
+    Returns:
+        List of dicts, each with keys:
+            - constraint: The original Fusion constraint object
+            - type_name: Display name (e.g., 'Horizontal', 'Parallel')
+            - related_label: Display label for related entity (e.g., 'Line #3', '--')
+            - is_deletable: Whether the constraint can be deleted
+    """
+    results = []
+
+    for i in range(entity.geometricConstraints.count):
+        constraint = entity.geometricConstraints.item(i)
+        info = _build_constraint_info(constraint, entity, index_finder)
+        results.append(info)
+
+    if include_dimensions and hasattr(entity, "sketchDimensions"):
+        for i in range(entity.sketchDimensions.count):
+            dim = entity.sketchDimensions.item(i)
+            info = _build_constraint_info(dim, entity, index_finder)
+            results.append(info)
+
+    return results
+
+
+def _build_constraint_info(constraint, selected_entity, index_finder):
+    """Build a display-ready dict for a single constraint."""
+    type_name_raw = constraint.objectType.split("::")[-1]
+    is_known = type_name_raw in _CONSTRAINT_ENTITY_PROPS or type_name_raw == "OffsetConstraint"
+
+    if is_known:
+        type_name = get_constraint_type_name(constraint.objectType)
+        is_deletable = getattr(constraint, "isDeletable", False)
+    else:
+        type_name = f"Unknown ({type_name_raw})"
+        is_deletable = False
+        _log.warning("Unknown constraint type: %s", constraint.objectType)
+
+    related = resolve_related_entity(constraint, selected_entity)
+    related_label = _format_related(related, index_finder)
+
+    return {
+        "constraint": constraint,
+        "type_name": type_name,
+        "related_label": related_label,
+        "is_deletable": is_deletable,
+    }
+
+
+def _format_related(related, index_finder):
+    """Format the related entity result into a display string.
+
+    Args:
+        related: '--', a single entity, or a list of entities.
+        index_finder: Callable(entity) -> int for resolving collection indices.
+    """
+    if related == "--":
+        return "--"
+    if isinstance(related, list):
+        if len(related) == 0:
+            return "--"
+        labels = []
+        for e in related[:3]:
+            label = get_entity_label(e, index_finder(e))
+            labels.append(label)
+        if len(related) > 3:
+            labels.append(f"+{len(related) - 3} more")
+        return ", ".join(labels)
+    # Single entity
+    return get_entity_label(related, index_finder(related))

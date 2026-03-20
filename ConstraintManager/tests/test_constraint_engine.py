@@ -173,3 +173,104 @@ def test_resolve_offset_selected_in_parent():
     assert len(result) == 2
     assert child1 in result
     assert child2 in result
+
+
+# --- Enumeration tests ---
+
+class MockConstraintList:
+    """Mock for GeometricConstraintList."""
+
+    def __init__(self, items):
+        self._items = items
+
+    @property
+    def count(self):
+        return len(self._items)
+
+    def item(self, index):
+        return self._items[index]
+
+    def __iter__(self):
+        return iter(self._items)
+
+
+class MockSketchEntityWithConstraints(MockSketchEntity):
+    """Mock entity that also has geometricConstraints."""
+
+    def __init__(self, object_type, index=0, constraints=None, is_construction=False):
+        super().__init__(object_type, index, is_construction)
+        self.geometricConstraints = MockConstraintList(constraints or [])
+
+
+def _mock_index_finder(entity):
+    """Test index finder — returns the mock's _index attribute."""
+    return getattr(entity, "_index", 0)
+
+
+def test_enumerate_constraints_basic():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import enumerate_constraints
+    line_a = MockSketchEntityWithConstraints("adsk::fusion::SketchLine", index=0)
+    line_b = _make_entity("SketchLine", index=1)
+    h_constraint = MockConstraint("HorizontalConstraint", isDeletable=True, line=line_a)
+    p_constraint = MockConstraint("ParallelConstraint", isDeletable=True, lineOne=line_a, lineTwo=line_b)
+    line_a.geometricConstraints = MockConstraintList([h_constraint, p_constraint])
+    results = enumerate_constraints(line_a, index_finder=_mock_index_finder)
+    assert len(results) == 2
+    assert results[0]["type_name"] == "Horizontal"
+    assert results[0]["related_label"] == "--"
+    assert results[0]["is_deletable"] is True
+    assert results[1]["type_name"] == "Parallel"
+    assert results[1]["related_label"] == "Line #1"
+    assert results[1]["is_deletable"] is True
+
+def test_enumerate_constraints_non_deletable():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import enumerate_constraints
+    entity = MockSketchEntityWithConstraints("adsk::fusion::SketchLine", index=0)
+    constraint = MockConstraint("HorizontalConstraint", isDeletable=False, line=entity)
+    entity.geometricConstraints = MockConstraintList([constraint])
+    results = enumerate_constraints(entity, index_finder=_mock_index_finder)
+    assert len(results) == 1
+    assert results[0]["is_deletable"] is False
+
+def test_enumerate_constraints_empty():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import enumerate_constraints
+    entity = MockSketchEntityWithConstraints("adsk::fusion::SketchLine", index=0)
+    entity.geometricConstraints = MockConstraintList([])
+    results = enumerate_constraints(entity, index_finder=_mock_index_finder)
+    assert results == []
+
+def test_enumerate_unknown_constraint_shown():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import enumerate_constraints
+    entity = MockSketchEntityWithConstraints("adsk::fusion::SketchLine", index=0)
+    unknown = MockConstraint("BrandNewConstraint", isDeletable=True)
+    entity.geometricConstraints = MockConstraintList([unknown])
+    results = enumerate_constraints(entity, index_finder=_mock_index_finder)
+    assert len(results) == 1
+    assert results[0]["type_name"] == "Unknown (BrandNewConstraint)"
+    assert results[0]["is_deletable"] is False  # Unknown types forced non-deletable
+    assert results[0]["related_label"] == "--"
+
+def test_format_related_single_entity():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import _format_related
+    entity = _make_entity("SketchLine", index=5)
+    result = _format_related(entity, lambda e: e._index)
+    assert result == "Line #5"
+
+def test_format_related_list():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import _format_related
+    e1 = _make_entity("SketchLine", index=1)
+    e2 = _make_entity("SketchArc", index=2)
+    result = _format_related([e1, e2], lambda e: e._index)
+    assert result == "Line #1, Arc #2"
+
+def test_format_related_list_truncation():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import _format_related
+    entities = [_make_entity("SketchLine", index=i) for i in range(5)]
+    result = _format_related(entities, lambda e: e._index)
+    assert "+2 more" in result
+    assert result.count(",") == 3  # 3 labels + "+2 more"
+
+def test_format_related_dash():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import _format_related
+    assert _format_related("--", lambda e: 0) == "--"
+    assert _format_related([], lambda e: 0) == "--"
