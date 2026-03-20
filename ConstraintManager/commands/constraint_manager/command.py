@@ -83,8 +83,10 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
             cmd = args.command
-            cmd.isOKButtonVisible = False
-            cmd.cancelButtonText = "Close"
+            # Use OK as "Close" — Cancel would roll back the transaction,
+            # undoing all deletions made during inputChanged.
+            cmd.okButtonText = "Close"
+            cmd.isCancelButtonVisible = False
 
             # Verify active sketch edit mode
             design = adsk.fusion.Design.cast(_app.activeProduct)
