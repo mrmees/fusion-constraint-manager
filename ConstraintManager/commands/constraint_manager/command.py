@@ -20,10 +20,13 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.8-debug"
+CMD_VERSION = "0.9"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
+
+# Module-level state shared between handlers (class attrs get lost between events)
+_current_constraints = []
 
 
 def start(app, ui):
@@ -186,7 +189,6 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
     """
 
     _handling_change = False
-    _current_constraints = []
 
     def notify(self, args):
         if self._handling_change:
@@ -210,6 +212,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
     def _on_entity_changed(self, inputs):
         """Rebuild the constraint table for the newly selected entity."""
+        global _current_constraints
         entity_select = inputs.itemById("entitySelect")
         table = inputs.itemById("constraintTable")
 
@@ -218,7 +221,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             table.deleteRow(i)
 
         if entity_select.selectionCount == 0:
-            self._current_constraints = []
+            _current_constraints = []
             return
 
         selected = entity_select.selection(0).entity
@@ -226,6 +229,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
     def _populate_table(self, inputs, selected):
         """Enumerate constraints for an entity and fill the table."""
+        global _current_constraints
         table = inputs.itemById("constraintTable")
 
         infos = constraint_engine.enumerate_constraints(
@@ -238,7 +242,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             old_msg.isVisible = False
 
         if not infos:
-            self._current_constraints = []
+            _current_constraints = []
             msg = inputs.itemById("noConstraints")
             if not msg:
                 msg = inputs.addTextBoxCommandInput(
@@ -276,7 +280,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             table.addCommandInput(type_input, i, 1)
             table.addCommandInput(related_input, i, 2)
 
-        self._current_constraints = infos
+        _current_constraints = infos
 
     def _on_select_all(self, inputs):
         """Check all deletable constraint checkboxes."""
@@ -302,11 +306,8 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
             inputs = cmd.commandInputs
             table = inputs.itemById("constraintTable")
 
-            constraints = InputChangedHandler._current_constraints
-            debug = []  # Collect debug info to show user
-
+            constraints = _current_constraints
             if not constraints or not table:
-                _ui.messageBox("DEBUG: No constraints or no table")
                 return
 
             # Collect tokens of checked constraints
@@ -315,20 +316,15 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 cb = table.getInputAtPosition(i, 0)
                 if cb and cb.value:
                     token = constraints[i].get("entity_token")
-                    debug.append(f"Row {i}: checked, token={'YES' if token else 'NONE'}")
                     if token:
                         tokens_to_delete.append(token)
 
             if not tokens_to_delete:
-                _ui.messageBox(f"DEBUG: No tokens to delete\n\nRows checked:\n" + "\n".join(debug) if debug else "No rows checked")
                 return
-
-            debug.append(f"\n{len(tokens_to_delete)} tokens to resolve")
 
             # Re-resolve constraints from tokens and delete
             design = adsk.fusion.Design.cast(_app.activeProduct)
             if not design:
-                _ui.messageBox("DEBUG: No active design")
                 return
 
             deleted = 0
@@ -337,36 +333,29 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 try:
                     matches = design.findEntityByToken(token)
                     if not matches or len(matches) == 0:
-                        debug.append(f"Token resolve: NO MATCH ({token[:50]})")
                         failed += 1
                         continue
                     entity = matches[0]
-                    obj_type = getattr(entity, "objectType", "unknown")
-                    is_del = getattr(entity, "isDeletable", "N/A")
-                    is_valid = getattr(entity, "isValid", "N/A")
-                    debug.append(f"Resolved: {obj_type}, deletable={is_del}, valid={is_valid}")
                     if hasattr(entity, "isDeletable") and entity.isDeletable:
-                        result = entity.deleteMe()
-                        debug.append(f"deleteMe() returned: {result}")
+                        entity.deleteMe()
                         deleted += 1
-                    else:
-                        debug.append("Skipped: not deletable")
                 except Exception as e:
-                    debug.append(f"ERROR: {e}")
+                    _log.error("Failed to delete constraint: %s", e)
                     failed += 1
 
-            _ui.messageBox(f"Deleted {deleted}, failed {failed}\n\n" + "\n".join(debug))
+            _log.info("Deleted %d, failed %d", deleted, failed)
 
         except:
-            _ui.messageBox(f"Execute error:\n{traceback.format_exc()}")
+            _log.error("Execute error: %s", traceback.format_exc())
 
 
 class DestroyHandler(adsk.core.CommandEventHandler):
     """Fires when command is destroyed — clean up handler references."""
 
     def notify(self, args):
-        global _cmd_handlers
+        global _cmd_handlers, _current_constraints
         _cmd_handlers = []
+        _current_constraints = []
 
 
 def _find_entity_index(entity):
