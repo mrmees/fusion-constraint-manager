@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.8"
+CMD_VERSION = "0.8-debug"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -303,7 +303,10 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
             table = inputs.itemById("constraintTable")
 
             constraints = InputChangedHandler._current_constraints
+            debug = []  # Collect debug info to show user
+
             if not constraints or not table:
+                _ui.messageBox("DEBUG: No constraints or no table")
                 return
 
             # Collect tokens of checked constraints
@@ -312,15 +315,20 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 cb = table.getInputAtPosition(i, 0)
                 if cb and cb.value:
                     token = constraints[i].get("entity_token")
+                    debug.append(f"Row {i}: checked, token={'YES' if token else 'NONE'}")
                     if token:
                         tokens_to_delete.append(token)
 
             if not tokens_to_delete:
+                _ui.messageBox(f"DEBUG: No tokens to delete\n\nRows checked:\n" + "\n".join(debug) if debug else "No rows checked")
                 return
+
+            debug.append(f"\n{len(tokens_to_delete)} tokens to resolve")
 
             # Re-resolve constraints from tokens and delete
             design = adsk.fusion.Design.cast(_app.activeProduct)
             if not design:
+                _ui.messageBox("DEBUG: No active design")
                 return
 
             deleted = 0
@@ -329,23 +337,28 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 try:
                     matches = design.findEntityByToken(token)
                     if not matches or len(matches) == 0:
-                        _log.warning("Could not resolve token: %s", token[:40])
+                        debug.append(f"Token resolve: NO MATCH ({token[:50]})")
                         failed += 1
                         continue
                     entity = matches[0]
+                    obj_type = getattr(entity, "objectType", "unknown")
+                    is_del = getattr(entity, "isDeletable", "N/A")
+                    is_valid = getattr(entity, "isValid", "N/A")
+                    debug.append(f"Resolved: {obj_type}, deletable={is_del}, valid={is_valid}")
                     if hasattr(entity, "isDeletable") and entity.isDeletable:
-                        entity.deleteMe()
+                        result = entity.deleteMe()
+                        debug.append(f"deleteMe() returned: {result}")
                         deleted += 1
                     else:
-                        _log.info("Constraint not deletable, skipping")
+                        debug.append("Skipped: not deletable")
                 except Exception as e:
-                    _log.error("Failed to delete constraint: %s", e)
+                    debug.append(f"ERROR: {e}")
                     failed += 1
 
-            _log.info("Deleted %d, failed %d", deleted, failed)
+            _ui.messageBox(f"Deleted {deleted}, failed {failed}\n\n" + "\n".join(debug))
 
         except:
-            _log.error("Execute error: %s", traceback.format_exc())
+            _ui.messageBox(f"Execute error:\n{traceback.format_exc()}")
 
 
 class DestroyHandler(adsk.core.CommandEventHandler):
