@@ -20,12 +20,12 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.9"
+CMD_VERSION = "1.0"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
 
-# Module-level state shared between handlers (class attrs get lost between events)
+# Module-level state shared between handlers
 _current_constraints = []
 
 
@@ -87,7 +87,6 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
             cmd = args.command
-            # OK = perform deletion, Cancel = close without deleting
             cmd.okButtonText = "Delete Selected"
 
             # Verify active sketch edit mode
@@ -103,18 +102,18 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             inputs = cmd.commandInputs
 
-            # Entity selection input
+            # Entity selection input — multiple entities allowed
             entity_select = inputs.addSelectionInput(
-                "entitySelect", "Select Entity", "Click a sketch entity"
+                "entitySelect", "Select Entities", "Click sketch entities"
             )
             entity_select.addSelectionFilter("SketchCurves")
             entity_select.addSelectionFilter("SketchPoints")
-            entity_select.setSelectionLimits(0, 1)
+            entity_select.setSelectionLimits(0, 0)  # 0 max = unlimited
             entity_select.isUseCurrentSelections = False
 
-            # Constraint table
+            # Constraint table — 4 columns: checkbox, entity, type, related
             table = inputs.addTableCommandInput(
-                "constraintTable", "Constraints", 3, "1:4:4"
+                "constraintTable", "Constraints", 4, "1:3:3:3"
             )
             table.maximumVisibleRows = 15
             table.minimumVisibleRows = 6
@@ -183,10 +182,7 @@ class PreSelectHandler(adsk.core.SelectionEventHandler):
 
 
 class InputChangedHandler(adsk.core.InputChangedEventHandler):
-    """Handles entity selection changes, checkbox toggles, and Select All.
-
-    No model changes here — just UI updates. Deletion happens in execute.
-    """
+    """Handles entity selection changes, checkbox toggles, and Select All."""
 
     _handling_change = False
 
@@ -199,19 +195,17 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             inputs = args.inputs
 
             if changed_input.id == "entitySelect":
-                self._on_entity_changed(inputs)
+                self._on_selection_changed(inputs)
             elif changed_input.id == "selectAllBtn":
                 self._on_select_all(inputs)
                 changed_input.value = False
-            elif changed_input.id.startswith("check_"):
-                pass  # Checkboxes just toggle, no action needed
         except:
             _log.error("InputChanged error: %s", traceback.format_exc())
         finally:
             self._handling_change = False
 
-    def _on_entity_changed(self, inputs):
-        """Rebuild the constraint table for the newly selected entity."""
+    def _on_selection_changed(self, inputs):
+        """Rebuild the constraint table for all selected entities."""
         global _current_constraints
         entity_select = inputs.itemById("entitySelect")
         table = inputs.itemById("constraintTable")
@@ -220,28 +214,30 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
         for i in range(table.rowCount - 1, -1, -1):
             table.deleteRow(i)
 
-        if entity_select.selectionCount == 0:
-            _current_constraints = []
-            return
-
-        selected = entity_select.selection(0).entity
-        self._populate_table(inputs, selected)
-
-    def _populate_table(self, inputs, selected):
-        """Enumerate constraints for an entity and fill the table."""
-        global _current_constraints
-        table = inputs.itemById("constraintTable")
-
-        infos = constraint_engine.enumerate_constraints(
-            selected, index_finder=_find_entity_index
-        )
-
-        # Handle "no constraints" message
+        # Hide old "no constraints" message
         old_msg = inputs.itemById("noConstraints")
         if old_msg:
             old_msg.isVisible = False
 
-        if not infos:
+        if entity_select.selectionCount == 0:
+            _current_constraints = []
+            return
+
+        # Enumerate constraints across all selected entities
+        all_infos = []
+        for sel_idx in range(entity_select.selectionCount):
+            entity = entity_select.selection(sel_idx).entity
+            entity_index = _find_entity_index(entity)
+            entity_label = constraint_engine.get_entity_label(entity, entity_index)
+
+            infos = constraint_engine.enumerate_constraints(
+                entity, index_finder=_find_entity_index
+            )
+            for info in infos:
+                info["source_label"] = entity_label
+                all_infos.append(info)
+
+        if not all_infos:
             _current_constraints = []
             msg = inputs.itemById("noConstraints")
             if not msg:
@@ -251,8 +247,8 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             msg.isVisible = True
             return
 
-        # Populate table rows
-        for i, info in enumerate(infos):
+        # Populate table rows: checkbox | entity | type | related
+        for i, info in enumerate(all_infos):
             row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
 
             cb = row_inputs.addBoolValueInput(
@@ -260,6 +256,13 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             )
             cb.isEnabled = info["is_deletable"]
 
+            # Source entity column
+            entity_input = row_inputs.addStringValueInput(
+                f"entity_{i}", "", info["source_label"]
+            )
+            entity_input.isReadOnly = True
+
+            # Type column
             type_display = info["type_name"]
             if not info["is_deletable"]:
                 type_display = f"\U0001F512 {type_display}"
@@ -268,6 +271,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             )
             type_input.isReadOnly = True
 
+            # Related entity column
             related_display = info["related_label"]
             if not info["is_deletable"] and related_display != "--":
                 related_display = f"{related_display} (locked)"
@@ -277,10 +281,11 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             related_input.isReadOnly = True
 
             table.addCommandInput(cb, i, 0)
-            table.addCommandInput(type_input, i, 1)
-            table.addCommandInput(related_input, i, 2)
+            table.addCommandInput(entity_input, i, 1)
+            table.addCommandInput(type_input, i, 2)
+            table.addCommandInput(related_input, i, 3)
 
-        _current_constraints = infos
+        _current_constraints = all_infos
 
     def _on_select_all(self, inputs):
         """Check all deletable constraint checkboxes."""
@@ -294,10 +299,9 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
 
 class ExecuteHandler(adsk.core.CommandEventHandler):
-    """Performs deletion of checked constraints when OK/Delete Selected is clicked.
+    """Performs deletion of checked constraints when Delete Selected is clicked.
 
-    Constraint objects from inputChanged may be stale by the time execute fires.
-    We re-resolve them from entityToken via Design.findEntityByToken().
+    Re-resolves constraints from entityToken via Design.findEntityByToken().
     """
 
     def notify(self, args):
