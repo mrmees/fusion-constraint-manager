@@ -176,8 +176,12 @@ def _build_constraint_info(constraint, selected_entity, index_finder):
         related_label = "--"
         _log.warning("Unknown constraint type: %s", constraint.objectType)
 
+    # Store entityToken for stable re-resolution in execute handler
+    token = getattr(constraint, "entityToken", None)
+
     return {
         "constraint": constraint,
+        "entity_token": token,
         "type_name": type_name,
         "related_label": related_label,
         "is_deletable": is_deletable,

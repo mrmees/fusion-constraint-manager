@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.7"
+CMD_VERSION = "0.8"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -292,7 +292,8 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 class ExecuteHandler(adsk.core.CommandEventHandler):
     """Performs deletion of checked constraints when OK/Delete Selected is clicked.
 
-    This is the proper place for model changes in Fusion's command lifecycle.
+    Constraint objects from inputChanged may be stale by the time execute fires.
+    We re-resolve them from entityToken via Design.findEntityByToken().
     """
 
     def notify(self, args):
@@ -305,21 +306,43 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
             if not constraints or not table:
                 return
 
-            # Collect checked constraints
-            to_delete = []
+            # Collect tokens of checked constraints
+            tokens_to_delete = []
             for i in range(table.rowCount):
                 cb = table.getInputAtPosition(i, 0)
                 if cb and cb.value:
-                    to_delete.append(constraints[i]["constraint"])
+                    token = constraints[i].get("entity_token")
+                    if token:
+                        tokens_to_delete.append(token)
 
-            if not to_delete:
+            if not tokens_to_delete:
                 return
 
-            result = constraint_engine.delete_constraints(to_delete)
-            _log.info(
-                "Deleted %d, failed %d, skipped %d",
-                result["deleted"], result["failed"], result["skipped"],
-            )
+            # Re-resolve constraints from tokens and delete
+            design = adsk.fusion.Design.cast(_app.activeProduct)
+            if not design:
+                return
+
+            deleted = 0
+            failed = 0
+            for token in tokens_to_delete:
+                try:
+                    matches = design.findEntityByToken(token)
+                    if not matches or len(matches) == 0:
+                        _log.warning("Could not resolve token: %s", token[:40])
+                        failed += 1
+                        continue
+                    entity = matches[0]
+                    if hasattr(entity, "isDeletable") and entity.isDeletable:
+                        entity.deleteMe()
+                        deleted += 1
+                    else:
+                        _log.info("Constraint not deletable, skipping")
+                except Exception as e:
+                    _log.error("Failed to delete constraint: %s", e)
+                    failed += 1
+
+            _log.info("Deleted %d, failed %d", deleted, failed)
 
         except:
             _log.error("Execute error: %s", traceback.format_exc())
