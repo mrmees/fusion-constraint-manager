@@ -15,14 +15,15 @@ A 100% Vibe Coded Fusion 360 add-in for viewing and selectively deleting sketch 
 
 ## Installation
 
-1. Download or clone this repository
-2. Copy the `ConstraintManager/` folder to your Fusion add-ins directory:
+1. Download the latest `ConstraintManager-v*.zip` from [Releases](https://github.com/mrmees/fusion-constraint-manager/releases)
+2. Extract the zip — you'll get a `ConstraintManager/` folder
+3. Copy it to your Fusion add-ins directory:
    ```
    %APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\
    ```
-3. In Fusion: **Tools > Scripts & Add-Ins > Add-Ins** tab
-4. Find **Constraint Manager** and click **Run**
-5. Optionally check **Run on Startup** to load it automatically
+4. In Fusion: **Tools > Scripts & Add-Ins > Add-Ins** tab
+5. Find **Constraint Manager** and click **Run**
+6. Optionally check **Run on Startup** to load it automatically
 
 ## Usage
 
