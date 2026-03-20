@@ -1,0 +1,12 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "ConstraintManager",
+    "author": "Matthew Mees",
+    "description": {
+        "": "View and delete sketch constraints attached to a selected entity"
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows|mac"
+}
