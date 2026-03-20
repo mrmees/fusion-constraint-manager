@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.5.4"
+CMD_VERSION = "0.6"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -123,11 +123,17 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             table.minimumVisibleRows = 6
             table.isEnabled = True
 
-            # Delete Selected button — isFullWidth centers it but removes side label
-            del_btn = inputs.addBoolValueInput(
-                "deleteBtn", "Delete Selected", False, "", False
+            # Action buttons in a row using a small table
+            btn_table = inputs.addTableCommandInput(
+                "btnTable", "", 2, "1:1"
             )
-            del_btn.isFullWidth = True
+            btn_table.maximumVisibleRows = 1
+            btn_table.tablePresentationStyle = 1  # transparentBackgroundTablePresentationStyle
+            btn_row = adsk.core.CommandInputs.cast(btn_table.commandInputs)
+            btn_row.addBoolValueInput("deleteBtn", "Delete Selected", False, "", False)
+            btn_row.addBoolValueInput("deleteAllBtn", "Delete All", False, "", False)
+            btn_table.addCommandInput(btn_table.commandInputs.itemById("deleteBtn"), 0, 0)
+            btn_table.addCommandInput(btn_table.commandInputs.itemById("deleteAllBtn"), 0, 1)
 
             # Wire command-instance event handlers
             input_changed = InputChangedHandler()
@@ -206,7 +212,10 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             if changed_input.id == "entitySelect":
                 self._on_entity_changed(inputs)
             elif changed_input.id == "deleteBtn":
-                self._on_delete_requested(args)
+                self._on_delete_requested(args, all_deletable=False)
+                changed_input.value = False
+            elif changed_input.id == "deleteAllBtn":
+                self._on_delete_requested(args, all_deletable=True)
                 changed_input.value = False
             elif changed_input.id.startswith("check_"):
                 self._update_delete_state(inputs)
@@ -311,8 +320,12 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
                 break
         del_btn.isEnabled = any_checked
 
-    def _on_delete_requested(self, args):
-        """Queue checked constraints for deletion, then trigger execute."""
+    def _on_delete_requested(self, args, all_deletable=False):
+        """Queue constraints for deletion, then trigger execute.
+
+        Args:
+            all_deletable: If True, delete all deletable constraints (ignore checkboxes).
+        """
         global _pending_deletes
         inputs = args.inputs
         table = inputs.itemById("constraintTable")
@@ -320,12 +333,20 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
         if not self._current_constraints:
             return
 
-        # Collect checked constraints
-        to_delete = []
-        for i in range(table.rowCount):
-            cb_input = table.getInputAtPosition(i, 0)
-            if cb_input and cb_input.value:
-                to_delete.append(self._current_constraints[i]["constraint"])
+        if all_deletable:
+            # Delete every deletable constraint on this entity
+            to_delete = [
+                info["constraint"]
+                for info in self._current_constraints
+                if info["is_deletable"]
+            ]
+        else:
+            # Delete only checked constraints
+            to_delete = []
+            for i in range(table.rowCount):
+                cb_input = table.getInputAtPosition(i, 0)
+                if cb_input and cb_input.value:
+                    to_delete.append(self._current_constraints[i]["constraint"])
 
         if not to_delete:
             return
