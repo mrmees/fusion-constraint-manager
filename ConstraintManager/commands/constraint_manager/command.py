@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "0.5"
+CMD_VERSION = "0.5.1"
 CMD_NAME = f"Constraint Manager v{CMD_VERSION}"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
@@ -123,9 +123,9 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             table.minimumVisibleRows = 6
             table.isEnabled = True
 
-            # Delete Selected button
+            # Delete Selected button — blank space name kills the side label
             inputs.addBoolValueInput(
-                "deleteBtn", "Delete Selected", False, "", False
+                "deleteBtn", " ", False, "", False
             )
 
             # Wire command-instance event handlers
