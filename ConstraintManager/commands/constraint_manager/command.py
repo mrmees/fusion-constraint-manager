@@ -183,6 +183,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
     """Handles entity selection changes, checkbox toggles, and delete button."""
 
     _handling_change = False
+    _current_constraints = []
 
     def notify(self, args):
         if self._handling_change:
@@ -288,7 +289,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
         """Delete checked constraints and refresh the table."""
         table = inputs.itemById("constraintTable")
 
-        if not hasattr(self, "_current_constraints") or not self._current_constraints:
+        if not self._current_constraints:
             return
 
         # Collect checked constraints
