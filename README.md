@@ -1,8 +1,8 @@
-<human>
+..human..
 
 Fusion constraint management sucks so bad.  So very very bad.  So I vibed this.  Trying to let AI fold the laundry.  
 
-</human>
+../human..
 
 # Fusion Constraint Manager
 
