@@ -122,8 +122,15 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             inputs = cmd.commandInputs
 
-            # Entity selection input — multiple entities allowed
-            entity_select = inputs.addSelectionInput(
+            # Create three tabs — first tab is active by default (D-02, ENTY-02)
+            tab_selected = inputs.addTabCommandInput("tab_selected", "Selected")
+            tab_types = inputs.addTabCommandInput("tab_types", "Types")
+            tab_all = inputs.addTabCommandInput("tab_all", "All")
+
+            # --- Selected Entities tab (D-11: migrate v1.1 inputs into tab children) ---
+            sel_inputs = tab_selected.children
+
+            entity_select = sel_inputs.addSelectionInput(
                 "entitySelect", "Select Entities", "Click sketch entities"
             )
             entity_select.addSelectionFilter("SketchCurves")
@@ -131,36 +138,35 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             entity_select.setSelectionLimits(0, 0)  # 0 max = unlimited
             entity_select.isUseCurrentSelections = False
 
-            # Constraint table — 4 columns: checkbox, entity, type, related
-            table = inputs.addTableCommandInput(
+            table = sel_inputs.addTableCommandInput(
                 "constraintTable", "Constraints", 4, "1:3:3:3"
             )
             table.maximumVisibleRows = 15
             table.minimumVisibleRows = 6
             table.isEnabled = True
 
-            # Select All button
-            sel_all = inputs.addBoolValueInput(
+            sel_all = sel_inputs.addBoolValueInput(
                 "selectAllBtn", "Select All", False, "", False
             )
             sel_all.isFullWidth = True
 
-            # Wire command-instance event handlers
-            input_changed = InputChangedHandler()
-            cmd.inputChanged.add(input_changed)
-            _cmd_handlers.append(input_changed)
+            # --- Types tab placeholder (D-03) ---
+            types_inputs = tab_types.children
+            types_inputs.addTextBoxCommandInput(
+                "typesPlaceholder", "", "Constraint type summary will appear here.", 1, True
+            )
 
-            pre_select = PreSelectHandler()
-            cmd.preSelect.add(pre_select)
-            _cmd_handlers.append(pre_select)
+            # --- All tab placeholder (D-03) ---
+            all_inputs = tab_all.children
+            all_inputs.addTextBoxCommandInput(
+                "allPlaceholder", "", "Full constraint list will appear here.", 1, True
+            )
 
-            execute = ExecuteHandler()
-            cmd.execute.add(execute)
-            _cmd_handlers.append(execute)
-
-            destroy = DestroyHandler()
-            cmd.destroy.add(destroy)
-            _cmd_handlers.append(destroy)
+            # Wire command-instance event handlers (D-06)
+            _wire_handler(cmd.inputChanged, InputChangedHandler, _cmd_handlers)
+            _wire_handler(cmd.preSelect, PreSelectHandler, _cmd_handlers)
+            _wire_handler(cmd.execute, ExecuteHandler, _cmd_handlers)
+            _wire_handler(cmd.destroy, DestroyHandler, _cmd_handlers)
 
         except:
             _ui.messageBox(f"CommandCreated error:\n{traceback.format_exc()}")
@@ -211,36 +217,52 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             return
         self._handling_change = True
         try:
+            global _active_tab
             changed_input = args.input
             inputs = args.inputs
 
-            if changed_input.id == "entitySelect":
-                self._on_selection_changed(inputs)
-            elif changed_input.id == "selectAllBtn":
-                self._on_select_all(inputs)
-                changed_input.value = False
+            # Tab switch events — update active tab tracker (D-07)
+            if changed_input.objectType.endswith("TabCommandInput"):
+                if changed_input.isActive:
+                    _active_tab = changed_input.id
+                return
+
+            # Route to active tab's handler (TABS-02: no re-enumeration on switch)
+            if _active_tab == "tab_selected":
+                self._handle_selected_input(changed_input, inputs)
+            # tab_types and tab_all are placeholders in Phase 1
         except:
             _log.error("InputChanged error: %s", traceback.format_exc())
         finally:
             self._handling_change = False
 
+    def _handle_selected_input(self, changed_input, inputs):
+        """Route inputs for the Selected Entities tab."""
+        if changed_input.id == "entitySelect":
+            self._on_selection_changed(inputs)
+        elif changed_input.id == "selectAllBtn":
+            self._on_select_all(inputs)
+            changed_input.value = False
+
     def _on_selection_changed(self, inputs):
         """Rebuild the constraint table for all selected entities."""
-        global _current_constraints
-        entity_select = inputs.itemById("entitySelect")
-        table = inputs.itemById("constraintTable")
+        # Access inputs through tab children (Pitfall 1 from RESEARCH.md)
+        tab_selected = inputs.itemById("tab_selected")
+        sel_inputs = tab_selected.children
+        entity_select = sel_inputs.itemById("entitySelect")
+        table = sel_inputs.itemById("constraintTable")
 
         # Clear existing table rows
         for i in range(table.rowCount - 1, -1, -1):
             table.deleteRow(i)
 
         # Hide old "no constraints" message
-        old_msg = inputs.itemById("noConstraints")
+        old_msg = sel_inputs.itemById("noConstraints")
         if old_msg:
             old_msg.isVisible = False
 
         if entity_select.selectionCount == 0:
-            _current_constraints = []
+            _tab_state["selected"]["constraints"] = []
             return
 
         # Enumerate constraints across all selected entities, deduplicate by token
@@ -264,10 +286,10 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
                 all_infos.append(info)
 
         if not all_infos:
-            _current_constraints = []
-            msg = inputs.itemById("noConstraints")
+            _tab_state["selected"]["constraints"] = []
+            msg = sel_inputs.itemById("noConstraints")
             if not msg:
-                msg = inputs.addTextBoxCommandInput(
+                msg = sel_inputs.addTextBoxCommandInput(
                     "noConstraints", "", "No constraints found", 1, True
                 )
             msg.isVisible = True
@@ -327,11 +349,13 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             table.addCommandInput(type_input, row, 2)
             table.addCommandInput(related_input, row, 3)
 
-        _current_constraints = all_infos
+        _tab_state["selected"]["constraints"] = all_infos
 
     def _on_select_all(self, inputs):
         """Check all deletable constraint checkboxes (skip header row)."""
-        table = inputs.itemById("constraintTable")
+        tab_selected = inputs.itemById("tab_selected")
+        sel_inputs = tab_selected.children
+        table = sel_inputs.itemById("constraintTable")
         if not table or table.rowCount < 2:
             return
         for i in range(1, table.rowCount):  # Skip row 0 (header)
@@ -350,9 +374,17 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
         try:
             cmd = args.command
             inputs = cmd.commandInputs
-            table = inputs.itemById("constraintTable")
 
-            constraints = _current_constraints
+            # Route by active tab
+            if _active_tab == "tab_selected":
+                tab_selected = inputs.itemById("tab_selected")
+                sel_inputs = tab_selected.children
+                table = sel_inputs.itemById("constraintTable")
+                constraints = _tab_state["selected"]["constraints"]
+            else:
+                # tab_types and tab_all execution handled in Phase 2/3
+                return
+
             if not constraints or not table:
                 return
 
