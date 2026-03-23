@@ -6,7 +6,7 @@
     "description": {
         "": "View, highlight, and bulk-delete sketch constraints by entity or by type"
     },
-    "version": "1.0.0",
+    "version": "1.1.0",
     "runOnStartup": false,
     "supportedOS": "windows|mac"
 }
