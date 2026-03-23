@@ -303,6 +303,47 @@ def collect_constraints_by_type(geometric_constraints, type_name):
     return results
 
 
+def collect_entities_for_types(geometric_constraints, type_names):
+    """Collect unique sketch entities referenced by constraints of given types.
+
+    Used for viewport highlighting — returns the geometry that should be
+    visually highlighted when the user checks constraint types.
+
+    Args:
+        geometric_constraints: A GeometricConstraints collection.
+        type_names: List of display type names (e.g., ["Fix", "Horizontal"]).
+
+    Returns:
+        List of unique sketch entity objects referenced by matching constraints.
+    """
+    type_set = set(type_names)
+    seen_tokens = set()
+    entities = []
+
+    for i in range(geometric_constraints.count):
+        constraint = geometric_constraints.item(i)
+        if get_constraint_type_name(constraint.objectType) not in type_set:
+            continue
+
+        type_key = constraint.objectType.split("::")[-1]
+        props = _CONSTRAINT_ENTITY_PROPS.get(type_key)
+        if props is None:
+            continue
+
+        for prop in props:
+            entity = getattr(constraint, prop, None)
+            if entity is None:
+                continue
+            token = getattr(entity, "entityToken", None)
+            if token and token in seen_tokens:
+                continue
+            if token:
+                seen_tokens.add(token)
+            entities.append(entity)
+
+    return entities
+
+
 def delete_constraints(constraints):
     """Delete a list of constraints in reverse order.
 

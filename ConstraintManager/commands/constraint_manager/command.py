@@ -40,6 +40,7 @@ _tab_state = {
     },
 }
 _active_tab = "tab_selected"
+_completed = False  # Guards executePreview from firing after execute
 
 
 def _wire_handler(event, handler_class, handler_list):
@@ -275,6 +276,7 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             # Wire command-instance event handlers (D-06)
             _wire_handler(cmd.inputChanged, InputChangedHandler, _cmd_handlers)
+            _wire_handler(cmd.executePreview, ExecutePreviewHandler, _cmd_handlers)
             _wire_handler(cmd.preSelect, PreSelectHandler, _cmd_handlers)
             _wire_handler(cmd.execute, ExecuteHandler, _cmd_handlers)
             _wire_handler(cmd.destroy, DestroyHandler, _cmd_handlers)
@@ -500,6 +502,146 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
                 cb.value = True
 
 
+class ExecutePreviewHandler(adsk.core.CommandEventHandler):
+    """Live preview — highlights sketch entities for checked constraint types.
+
+    Fires after every inputChanged. Draws custom graphics overlays on
+    geometry referenced by checked types.
+
+    Per Fusion API docs:
+    - CustomGraphics are NOT auto-cleaned between calls
+    - executePreview fires after execute completes (guard with _completed flag)
+    - Use worldGeometry for model-space rendering
+    - Point3D is not Curve3D — use addPointSet for SketchPoints
+    - addCurve supports Line3D, Arc3D, Circle3D, Ellipse3D, EllipticalArc3D, NurbsCurve3D
+    - addCurve does NOT support InfiniteLine3D
+
+    Ref: docs/fusion-api/custom-graphics.md
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def notify(self, args):
+        try:
+            # Guard: don't redraw after execute has run
+            if _completed:
+                return
+
+            # Only highlight on Types tab
+            if _active_tab != "tab_types":
+                args.isValidResult = False
+                return
+
+            cmd = args.command
+            inputs = cmd.commandInputs
+
+            # Clean up previous custom graphics group
+            design = adsk.fusion.Design.cast(_app.activeProduct)
+            if not design:
+                args.isValidResult = False
+                return
+            root = design.rootComponent
+
+            # Remove our previous highlight group if it exists
+            for i in range(root.customGraphicsGroups.count - 1, -1, -1):
+                group = root.customGraphicsGroups.item(i)
+                if group.id == "constraintManagerHighlight":
+                    group.deleteMe()
+
+            # Get checked type names
+            tab_types = inputs.itemById("tab_types")
+            if tab_types:
+                types_inputs = tab_types.children
+            else:
+                types_inputs = inputs
+
+            types_table = types_inputs.itemById("typesTable")
+            type_names = _tab_state["types"].get("type_names", [])
+
+            if not types_table or not type_names:
+                args.isValidResult = False
+                return
+
+            checked_types = []
+            for i in range(1, types_table.rowCount):
+                cb = types_table.getInputAtPosition(i, 0)
+                if cb and hasattr(cb, "value") and cb.value:
+                    type_idx = i - 1
+                    if type_idx < len(type_names):
+                        checked_types.append(type_names[type_idx])
+
+            if not checked_types:
+                args.isValidResult = False
+                return
+
+            # Get sketch and collect entities
+            sketch = design.activeEditObject
+            if not isinstance(sketch, adsk.fusion.Sketch):
+                args.isValidResult = False
+                return
+
+            entities = constraint_engine.collect_entities_for_types(
+                sketch.geometricConstraints, checked_types
+            )
+
+            if not entities:
+                args.isValidResult = False
+                return
+
+            # Create custom graphics group with identifiable id
+            cg_group = root.customGraphicsGroups.add()
+            cg_group.id = "constraintManagerHighlight"
+
+            # Highlight color — red for visibility against sketch geometry
+            color = adsk.fusion.CustomGraphicsSolidColorEffect.create(
+                adsk.core.Color.create(255, 50, 50, 255)
+            )
+
+            for entity in entities:
+                try:
+                    # Use worldGeometry for model-space rendering
+                    geom = getattr(entity, "worldGeometry", None)
+                    if geom is None:
+                        geom = getattr(entity, "geometry", None)
+                    if geom is None:
+                        continue
+
+                    geom_type = geom.objectType.split("::")[-1]
+
+                    if geom_type == "Point3D":
+                        # Point3D is not Curve3D — use addPointSet
+                        coords = adsk.fusion.CustomGraphicsCoordinates.create(
+                            [geom.x, geom.y, geom.z]
+                        )
+                        point_gfx = cg_group.addPointSet(
+                            coords, [],
+                            adsk.fusion.CustomGraphicsPointTypes.PointCloudCustomGraphicsPointType,
+                            ""
+                        )
+                        point_gfx.color = color
+
+                    else:
+                        # Line3D, Arc3D, Circle3D, Ellipse3D, EllipticalArc3D, NurbsCurve3D
+                        curve_gfx = cg_group.addCurve(geom)
+                        curve_gfx.color = color
+                        curve_gfx.weight = 3
+
+                except:
+                    # Skip entities that fail — don't break the whole preview
+                    continue
+
+            # False = visual-only preview, Fusion rolls back before execute
+            # True would commit the graphics as a model change, breaking deletion
+            args.isValidResult = False
+
+        except:
+            if _ui:
+                _ui.messageBox(f"ExecutePreview error:\n{traceback.format_exc()}")
+            _log.error("ExecutePreview error: %s", traceback.format_exc())
+            args.isValidResult = False
+
+
 class ExecuteHandler(adsk.core.CommandEventHandler):
     """Performs deletion of checked constraints when Delete Selected is clicked.
 
@@ -508,6 +650,9 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
 
     def notify(self, args):
         try:
+            global _completed
+            _completed = True  # Block further executePreview calls
+
             cmd = args.command
             inputs = cmd.commandInputs
 
@@ -616,7 +761,20 @@ class DestroyHandler(adsk.core.CommandEventHandler):
     """Fires when command is destroyed — clean up handler references."""
 
     def notify(self, args):
-        global _cmd_handlers, _active_tab
+        global _cmd_handlers, _active_tab, _completed
+
+        # Clean up highlight graphics
+        try:
+            design = adsk.fusion.Design.cast(_app.activeProduct)
+            if design:
+                root = design.rootComponent
+                for i in range(root.customGraphicsGroups.count - 1, -1, -1):
+                    group = root.customGraphicsGroups.item(i)
+                    if group.id == "constraintManagerHighlight":
+                        group.deleteMe()
+        except:
+            pass
+
         _cmd_handlers = []
         _tab_state["selected"]["constraints"] = []
         _tab_state["types"]["summary"] = {}
@@ -624,6 +782,7 @@ class DestroyHandler(adsk.core.CommandEventHandler):
         _tab_state["all"]["constraints"] = []
         _tab_state["all"]["loaded"] = False
         _active_tab = "tab_selected"
+        _completed = False
 
 
 def _find_entity_index(entity):
