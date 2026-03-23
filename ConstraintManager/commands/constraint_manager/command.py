@@ -20,13 +20,33 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "1.1"
+CMD_VERSION = "2.0"
 CMD_NAME = "Constraint Manager"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel
 
-# Module-level state shared between handlers
-_current_constraints = []
+# Per-tab state (D-05: per-tab isolation)
+_tab_state = {
+    "selected": {
+        "constraints": [],      # List of constraint info dicts
+    },
+    "types": {
+        "summary": {},          # {type_name: count} — Phase 2
+    },
+    "all": {
+        "constraints": [],      # List of constraint info dicts — Phase 3
+        "loaded": False,        # Whether Load has been clicked — Phase 3
+    },
+}
+_active_tab = "tab_selected"
+
+
+def _wire_handler(event, handler_class, handler_list):
+    """Create handler, add to event, store reference to prevent GC."""
+    handler = handler_class()
+    event.add(handler)
+    handler_list.append(handler)
+    return handler
 
 
 def start(app, ui):
@@ -381,9 +401,13 @@ class DestroyHandler(adsk.core.CommandEventHandler):
     """Fires when command is destroyed — clean up handler references."""
 
     def notify(self, args):
-        global _cmd_handlers, _current_constraints
+        global _cmd_handlers, _active_tab
         _cmd_handlers = []
-        _current_constraints = []
+        _tab_state["selected"]["constraints"] = []
+        _tab_state["types"]["summary"] = {}
+        _tab_state["all"]["constraints"] = []
+        _tab_state["all"]["loaded"] = False
+        _active_tab = "tab_selected"
 
 
 def _find_entity_index(entity):
