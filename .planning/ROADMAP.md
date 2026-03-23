@@ -28,7 +28,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Selected Entities tab is active by default on command launch
   4. Switching between tabs does not re-enumerate constraints or reset per-tab state
   5. Engine functions for sketch-wide enumeration, type grouping, and type filtering pass unit tests outside Fusion
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Extend constraint engine with sketch-wide functions (TDD)
+- [ ] 01-02-PLAN.md — Migrate to three-tab dialog, preserve v1.1 Selected Entities behavior
+
 **UI hint**: yes
 
 ### Phase 2: Constraint Types Tab
@@ -63,6 +68,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine and Tab Foundation | 0/? | Not started | - |
+| 1. Engine and Tab Foundation | 0/2 | Planning complete | - |
 | 2. Constraint Types Tab | 0/? | Not started | - |
 | 3. All Constraints Tab | 0/? | Not started | - |
