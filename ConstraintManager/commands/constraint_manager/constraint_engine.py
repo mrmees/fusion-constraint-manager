@@ -188,6 +188,121 @@ def _build_constraint_info(constraint, selected_entity, index_finder):
     }
 
 
+def _build_sketch_constraint_info(constraint, index_finder):
+    """Build display info for a constraint in sketch-wide context (no selected entity).
+
+    Unlike _build_constraint_info which shows the "other" entity relative to a
+    selected entity, this labels ALL referenced entities for the constraint.
+
+    Args:
+        constraint: A Fusion geometric constraint object.
+        index_finder: Callable(entity) -> int for entity label resolution.
+
+    Returns:
+        Dict with keys: constraint, entity_token, type_name, entities_label,
+        is_deletable.
+    """
+    type_key = constraint.objectType.split("::")[-1]
+    props = _CONSTRAINT_ENTITY_PROPS.get(type_key)
+
+    if props is None:
+        _log.warning("Unknown constraint type: %s", constraint.objectType)
+        return {
+            "constraint": constraint,
+            "entity_token": getattr(constraint, "entityToken", None),
+            "type_name": f"Unknown ({type_key})",
+            "entities_label": "--",
+            "is_deletable": False,
+        }
+
+    type_name = get_constraint_type_name(constraint.objectType)
+    labels = []
+    for prop in props:
+        entity = getattr(constraint, prop, None)
+        if entity is not None:
+            labels.append(get_entity_label(entity, index_finder(entity)))
+    entities_label = ", ".join(labels) if labels else "--"
+
+    return {
+        "constraint": constraint,
+        "entity_token": getattr(constraint, "entityToken", None),
+        "type_name": type_name,
+        "entities_label": entities_label,
+        "is_deletable": getattr(constraint, "isDeletable", False),
+    }
+
+
+def aggregate_constraint_types(geometric_constraints):
+    """Count constraints by type across a sketch's geometric constraints.
+
+    Args:
+        geometric_constraints: A GeometricConstraints collection
+            (sketch.geometricConstraints) with .count and .item(i).
+
+    Returns:
+        Dict mapping type display name to count.
+        e.g., {"Fix": 87, "Horizontal": 12, "Coincident": 45}
+    """
+    counts = {}
+    for i in range(geometric_constraints.count):
+        constraint = geometric_constraints.item(i)
+        type_name = get_constraint_type_name(constraint.objectType)
+        counts[type_name] = counts.get(type_name, 0) + 1
+    return counts
+
+
+def enumerate_all_constraints(geometric_constraints, index_finder):
+    """Enumerate every constraint in a sketch with full metadata.
+
+    Args:
+        geometric_constraints: A GeometricConstraints collection
+            (sketch.geometricConstraints) with .count and .item(i).
+        index_finder: Callable(entity) -> int for entity label resolution.
+
+    Returns:
+        List of constraint info dicts, each with keys: constraint,
+        entity_token, type_name, entities_label, is_deletable.
+    """
+    results = []
+    for i in range(geometric_constraints.count):
+        constraint = geometric_constraints.item(i)
+        info = _build_sketch_constraint_info(constraint, index_finder)
+        results.append(info)
+    return results
+
+
+def filter_constraints_by_type(constraints, type_name):
+    """Filter a pre-enumerated constraint list by type.
+
+    Args:
+        constraints: List of constraint info dicts (from enumerate_all_constraints).
+        type_name: Display name to filter by (e.g., "Fix"). Case-sensitive.
+
+    Returns:
+        Filtered list of constraint info dicts.
+    """
+    return [c for c in constraints if c["type_name"] == type_name]
+
+
+def collect_constraints_by_type(geometric_constraints, type_name):
+    """Collect raw constraint objects of a specific type for bulk deletion.
+
+    Args:
+        geometric_constraints: A GeometricConstraints collection
+            (sketch.geometricConstraints) with .count and .item(i).
+        type_name: Display name of the constraint type (e.g., "Fix").
+
+    Returns:
+        List of raw constraint objects matching the type.
+    """
+    results = []
+    for i in range(geometric_constraints.count):
+        constraint = geometric_constraints.item(i)
+        if get_constraint_type_name(constraint.objectType) == type_name:
+            results.append(constraint)
+    return results
+
+
 def delete_constraints(constraints):
     """Delete a list of constraints in reverse order.
 
