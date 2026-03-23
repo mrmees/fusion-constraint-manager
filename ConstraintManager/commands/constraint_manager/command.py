@@ -20,7 +20,7 @@ _addin_handlers = []
 
 # Command identifiers
 CMD_ID = "constraintManagerCmd"
-CMD_VERSION = "2.0"
+CMD_VERSION = "2.0.0"
 CMD_NAME = "Constraint Manager"
 CMD_DESC = "View and delete constraints on sketch entities"
 PANEL_ID = "SolidScriptsAddinsPanel"  # DESIGN workspace utilities panel

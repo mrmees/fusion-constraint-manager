@@ -4,9 +4,9 @@
     "id": "ConstraintManager",
     "author": "Matthew Mees",
     "description": {
-        "": "View and delete sketch constraints attached to a selected entity"
+        "": "View, highlight, and bulk-delete sketch constraints by entity or by type"
     },
-    "version": "1.1.0",
+    "version": "2.0.0",
     "runOnStartup": false,
     "supportedOS": "windows|mac"
 }

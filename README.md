@@ -1,17 +1,37 @@
 # Fusion Constraint Manager
 
-A 100% Vibe Coded Fusion 360 add-in for viewing and selectively deleting sketch constraints. Select one or more sketch entities, see all their geometric constraints in a table, and delete the ones you don't want — without hunting through overlapping constraint icons in the viewport.
+A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constraints. Two-tab interface: select entities to inspect individual constraints, or switch to the Types tab to see every constraint type in your sketch at a glance and nuke entire categories in one click.
 
 ![Constraint Manager screenshot](docs/images/screenshot.png)
 
+## What's New in v2.0
+
+- **Types tab** — see every constraint type in your sketch with counts, check the ones you want gone, hit Delete Selected
+- **Viewport highlighting** — checked constraint types light up in the viewport so you can see exactly what you're about to delete
+- **Auto-populate** — Types tab loads instantly when you switch to it, no manual refresh needed
+- **Bulk delete by type** — the killer feature for DXF/SVG imports: check "Fix" and delete hundreds of auto-applied constraints in one shot
+- **Tab-based UI** — Selected tab preserves all v1 behavior, Types tab adds sketch-wide operations
+
 ## Features
 
+### Selected Tab (per-entity)
 - **Multi-entity selection** — select one or many sketch entities at once
 - **Unified constraint table** — see all constraints across selected entities with columns for Entity, Type, and Related To
 - **Selective deletion** — check individual constraints or use Select All, then Delete Selected
 - **Deduplication** — shared constraints between selected entities appear only once
 - **Non-deletable constraints** shown with lock indicator for context
-- **Proper undo support** — deletions committed via Fusion's command transaction
+
+### Types Tab (sketch-wide)
+- **Type summary** — every constraint type in the active sketch with its count
+- **Checkbox selection** — check one or more constraint types to delete
+- **Viewport highlighting** — checked types highlight associated geometry in orange
+- **Bulk deletion** — Delete Selected removes all constraints of checked types
+- **Empty state** — clear message when sketch has no constraints
+
+### General
+- **Proper undo support** — all deletions committed via Fusion's command transaction (Ctrl+Z to undo)
+- **Lightweight** — no background processes, no auto-loading expensive operations
+- **52 unit tests** — constraint engine fully tested outside Fusion
 
 ## Installation
 
@@ -23,7 +43,7 @@ A 100% Vibe Coded Fusion 360 add-in for viewing and selectively deleting sketch 
    ```
 4. In Fusion: **Tools > Scripts & Add-Ins > Add-Ins** tab
 5. Find **Constraint Manager** and click **Run**
-6. Pin to toolbar or assign hotkey from the Utilties Menu / Add-Ins Tab (shift+c recommended)
+6. Pin to toolbar or assign hotkey from the Utilities Menu / Add-Ins Tab (Shift+C recommended)
 
    ![Hotkey Assignment](docs/images/hotkey_assignment.png)
 
@@ -31,12 +51,22 @@ A 100% Vibe Coded Fusion 360 add-in for viewing and selectively deleting sketch 
 
 ## Usage
 
-1. Enter sketch edit mode (double-click a sketch or create a new one)
-2. Click the **Constraint Manager** button in the toolbar (UTILITIES panel)
-3. Click one or more sketch entities (lines, arcs, circles, points, etc.)
-4. The table populates with all geometric constraints on the selected entities
-5. Check the constraints you want to remove (or click **Select All**)
-6. Click **Delete Selected** to remove them, or **Cancel** to close without changes
+### Selected Tab — Surgical Precision
+1. Enter sketch edit mode
+2. Click **Constraint Manager** in the toolbar
+3. Click one or more sketch entities (lines, arcs, circles, points)
+4. The table shows all geometric constraints on selected entities
+5. Check the ones you want to remove (or click **Select All**)
+6. Click **Delete Selected**
+
+### Types Tab — Bulk Operations
+1. Enter sketch edit mode
+2. Click **Constraint Manager** → switch to **Types** tab
+3. Table auto-populates with every constraint type and count
+4. Check the types you want to delete (geometry highlights in the viewport)
+5. Click **Delete Selected** to remove all constraints of checked types
+
+**DXF/SVG import tip:** After importing geometry, open the Types tab, check "Fix", and delete — removes all auto-applied Fix constraints in one shot.
 
 ## Project Structure
 
@@ -46,7 +76,7 @@ ConstraintManager/
 ├── ConstraintManager.manifest        # Add-in metadata
 ├── commands/
 │   └── constraint_manager/
-│       ├── command.py                # Command UI, event handlers
+│       ├── command.py                # Command UI, event handlers, tab logic
 │       └── constraint_engine.py      # Pure logic: enumeration, naming, deletion
 ├── resources/
 │   └── constraint_manager/
@@ -69,9 +99,13 @@ The command module (`command.py`) handles all Fusion API UI interaction and can 
 
 ### Key Architecture Decisions
 
-- **`inputChanged` is UI-only** — Fusion silently discards model changes made in this event. All constraint deletions happen in the `execute` handler.
-- **`entityToken` re-resolution** — constraint objects from `inputChanged` go stale by the time `execute` fires. We store `entityToken` strings and re-resolve via `Design.findEntityByToken()`.
-- **Module-level state** — class attributes on event handler classes don't survive between Fusion events. Shared state uses module-level globals.
+- **Two-tab UI** — Selected (per-entity) and Types (sketch-wide). An "All Constraints" tab was considered but scrapped — the two tabs cover the highest-impact use cases without performance risk.
+- **`APITabBar` for tab detection** — Fusion fires `inputChanged` with `id="APITabBar"` on tab switch (undocumented but universal pattern). Check `tab.isActive` to determine which tab is now showing.
+- **`executePreview` for highlighting** — CustomGraphics overlays drawn in `executePreview` handler with `isValidResult=False` for visual-only preview that doesn't interfere with deletion.
+- **`inputChanged` is UI-only** — Fusion silently discards model changes in this event. All constraint deletions happen in the `execute` handler.
+- **`entityToken` re-resolution** — constraint objects from `inputChanged` go stale by `execute`. Store `entityToken` strings and re-resolve via `Design.findEntityByToken()`.
+- **Module-level state** — class attributes on event handler classes don't survive between Fusion events. Shared state uses module-level globals with `_wire_handler()` utility for GC protection.
+- **Reverse iteration for bulk delete** — Fusion collections re-index on `deleteMe()`, so forward loops skip ~50% of targets. Always iterate in reverse.
 
 ## License
 
