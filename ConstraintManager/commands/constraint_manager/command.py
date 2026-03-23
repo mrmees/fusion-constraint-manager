@@ -31,7 +31,8 @@ _tab_state = {
         "constraints": [],      # List of constraint info dicts
     },
     "types": {
-        "summary": {},          # {type_name: count} — Phase 2
+        "summary": {},          # {type_name: count}
+        "pending_delete": None, # Type name awaiting deletion
     },
     "all": {
         "constraints": [],      # List of constraint info dicts — Phase 3
@@ -341,7 +342,8 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             # Route to active tab's handler (TABS-02: no re-enumeration on switch)
             if _active_tab == "tab_selected":
                 self._handle_selected_input(changed_input, inputs)
-            # tab_types and tab_all are placeholders in Phase 1
+            elif _active_tab == "tab_types":
+                self._handle_types_input(changed_input, inputs)
         except:
             _log.error("InputChanged error: %s", traceback.format_exc())
         finally:
@@ -354,6 +356,56 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
         elif changed_input.id == "selectAllBtn":
             self._on_select_all(inputs)
             changed_input.value = False
+
+    def _handle_types_input(self, changed_input, inputs):
+        """Route inputs for the Constraint Types tab."""
+        if changed_input.id != "deleteTypeBtn":
+            return
+
+        # Reset button value immediately
+        changed_input.value = False
+
+        # Navigate to types tab (Phase 1 fallback pattern)
+        tab_types = inputs.itemById("tab_types")
+        if tab_types:
+            types_inputs = tab_types.children
+        else:
+            types_inputs = inputs
+
+        table = types_inputs.itemById("typesTable")
+        status_msg = types_inputs.itemById("typesStatus")
+
+        if not table:
+            return
+
+        selected_row = table.selectedRow
+        # Row 0 is header, -1 means no selection
+        if selected_row <= 0:
+            if status_msg:
+                status_msg.formattedText = "Select a constraint type row first."
+                status_msg.isVisible = True
+            return
+
+        # Extract type name from selected row, column 0
+        type_name_input = table.getInputAtPosition(selected_row, 0)
+        if not type_name_input:
+            return
+        type_name = type_name_input.value
+
+        # Look up count from cached summary
+        summary = _tab_state["types"].get("summary", {})
+        count = summary.get(type_name, "?")
+
+        # Store pending delete for ExecuteHandler
+        _tab_state["types"]["pending_delete"] = type_name
+
+        # Show status message
+        if status_msg:
+            status_msg.formattedText = (
+                f"Ready to delete all <b>{count}</b> <b>{type_name}</b> "
+                f"constraints. Click 'Delete Selected' to confirm."
+            )
+            status_msg.isVisible = True
 
     def _on_selection_changed(self, inputs):
         """Rebuild the constraint table for all selected entities."""
@@ -502,8 +554,33 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                     sel_inputs = inputs
                 table = sel_inputs.itemById("constraintTable")
                 constraints = _tab_state["selected"]["constraints"]
+            elif _active_tab == "tab_types":
+                pending = _tab_state["types"].get("pending_delete")
+                if not pending:
+                    return
+
+                design = adsk.fusion.Design.cast(_app.activeProduct)
+                if not design:
+                    return
+                sketch = design.activeEditObject
+                if not isinstance(sketch, adsk.fusion.Sketch):
+                    return
+
+                # Snapshot constraints of this type, then delete in reverse (TYPE-05)
+                targets = constraint_engine.collect_constraints_by_type(
+                    sketch.geometricConstraints, pending
+                )
+                result = constraint_engine.delete_constraints(targets)
+                _log.info(
+                    "Bulk delete '%s': deleted=%d, failed=%d, skipped=%d",
+                    pending, result["deleted"], result["failed"], result["skipped"]
+                )
+
+                # Clear pending state
+                _tab_state["types"]["pending_delete"] = None
+                return
             else:
-                # tab_types and tab_all execution handled in Phase 2/3
+                # tab_all execution handled in Phase 3
                 return
 
             if not constraints or not table:
@@ -558,6 +635,7 @@ class DestroyHandler(adsk.core.CommandEventHandler):
         _cmd_handlers = []
         _tab_state["selected"]["constraints"] = []
         _tab_state["types"]["summary"] = {}
+        _tab_state["types"]["pending_delete"] = None
         _tab_state["all"]["constraints"] = []
         _tab_state["all"]["loaded"] = False
         _active_tab = "tab_selected"
