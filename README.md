@@ -2,7 +2,11 @@
 
 A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constraints. Two-tab interface: select entities to inspect individual constraints, or switch to the Types tab to see every constraint type in your sketch at a glance and nuke entire categories in one click.
 
-![Constraint Manager screenshot](docs/images/screenshot.png)
+### Entity Selection
+![Entity Selection](docs/images/entity_selection.PNG)
+
+### Group Selection by Type
+![Group Selection](docs/images/group_selection.PNG)
 
 ## What's New in v2.0
 
