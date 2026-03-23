@@ -24,10 +24,12 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 - ✓ Sketch-wide constraint enumeration engine — Phase 1
 - ✓ Type grouping/counting/filtering engine functions — Phase 1
 - ✓ Per-tab state isolation and wire_handler GC utility — Phase 1
+- ✓ Constraint Types tab with checkbox selection and bulk delete — Phase 2
+- ✓ Auto-populate Types tab on tab switch via APITabBar pattern — Phase 2
+- ✓ Viewport highlighting of checked constraint types via executePreview + CustomGraphics — Phase 2
 
 ### Active
 
-- [ ] **Constraint Types tab**: Summary table showing each constraint type, count, and "Delete All" action for the active sketch
 - [ ] **All Constraints tab**: Full list of every constraint in the active sketch with explicit "Load" button
 - [ ] **All Constraints tab**: Type column (sortable) for each constraint row
 - [ ] **All Constraints tab**: Dropdown filter by constraint type
@@ -36,7 +38,6 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 ### Out of Scope
 
 - Dimension constraints — deferred to future release (v2.x), geometric constraints only for now
-- Viewport highlighting of constraint geometry — deferred to future release
 - Under-constrained diagnostics — deferred to future release
 - Auto-constraint interception — Fusion API doesn't support intercepting constraints as they're created
 - Constraint replacement (e.g., swap perpendicular → H/V) — complex, defer to future
@@ -91,4 +92,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after Phase 1 completion*
+*Last updated: 2026-03-23 after Phase 2 completion*
