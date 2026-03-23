@@ -8,14 +8,6 @@ A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constrai
 ### Group Selection by Type
 ![Group Selection](docs/images/group_selection.PNG)
 
-## What's New in v2.0
-
-- **Types tab** — see every constraint type in your sketch with counts, check the ones you want gone, hit Delete Selected
-- **Viewport highlighting** — checked constraint types light up in the viewport so you can see exactly what you're about to delete
-- **Auto-populate** — Types tab loads instantly when you switch to it, no manual refresh needed
-- **Bulk delete by type** — the killer feature for DXF/SVG imports: check "Fix" and delete hundreds of auto-applied constraints in one shot
-- **Tab-based UI** — Selected tab preserves all v1 behavior, Types tab adds sketch-wide operations
-
 ## Features
 
 ### Selected Tab (per-entity)
