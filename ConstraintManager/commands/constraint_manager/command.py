@@ -34,6 +34,9 @@ _tab_state = {
         "summary": {},          # {type_name: count}
         "type_names": [],       # Ordered list matching table row indices
     },
+    "connections": {
+        "entries": [],          # List of {point, curve, point_label, curve_label}
+    },
 }
 _active_tab = "tab_selected"
 _completed = False  # Guards executePreview from firing after execute
@@ -200,6 +203,142 @@ def _populate_types_tab(types_inputs):
         _log.error("Error populating types tab: %s", traceback.format_exc())
 
 
+def _populate_connections_tab(conn_inputs):
+    """Populate the Shared Vertices tab — one row per shared SketchPoint.
+
+    Each row shows: checkbox | point label | number of connected curves.
+    Checking a row highlights all curves at that point. Clicking Delete
+    Selected detaches all curves from the point (each gets its own endpoint).
+
+    Args:
+        conn_inputs: The Shared Vertices tab's CommandInputs.
+    """
+    try:
+        table = conn_inputs.itemById("connectionsTable")
+        empty_msg = conn_inputs.itemById("connectionsEmpty")
+
+        # Clear existing rows
+        if table:
+            for i in range(table.rowCount - 1, -1, -1):
+                table.deleteRow(i)
+
+        _tab_state["connections"]["entries"] = []
+
+        # Get active sketch
+        design = adsk.fusion.Design.cast(_app.activeProduct)
+        if not design:
+            return
+        sketch = design.activeEditObject
+        if not isinstance(sketch, adsk.fusion.Sketch):
+            return
+
+        # Find all shared points (connected to 2+ entities)
+        entries = []
+        seen_points = set()
+
+        for i in range(sketch.sketchPoints.count):
+            point = sketch.sketchPoints.item(i)
+            token = getattr(point, "entityToken", None)
+            if token and token in seen_points:
+                continue
+            if token:
+                seen_points.add(token)
+
+            connected = getattr(point, "connectedEntities", None)
+            if connected is None or connected.count < 2:
+                continue
+
+            point_label = constraint_engine.get_entity_label(point, i)
+
+            # Collect all curves at this point
+            curves = []
+            for ci in range(connected.count):
+                curve = connected.item(ci)
+                curves.append({
+                    "curve": curve,
+                    "curve_token": getattr(curve, "entityToken", None),
+                    "curve_label": constraint_engine.get_entity_label(
+                        curve, _find_entity_index(curve)
+                    ),
+                })
+
+            entries.append({
+                "point": point,
+                "point_token": token,
+                "point_label": point_label,
+                "curves": curves,
+                "count": len(curves),
+            })
+
+        _tab_state["connections"]["entries"] = entries
+
+        if not entries:
+            if empty_msg:
+                empty_msg.isVisible = True
+            if table:
+                table.isVisible = False
+            return
+
+        if empty_msg:
+            empty_msg.isVisible = False
+        if table:
+            table.isVisible = True
+
+        # Unique ID counter
+        counter = _tab_state["connections"].get("row_counter", 0)
+        _tab_state["connections"]["row_counter"] = counter + 1
+
+        row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+
+        # Header row
+        hdr_cb = row_inputs.addStringValueInput(f"chdr_cb_{counter}", "", "")
+        hdr_cb.isReadOnly = True
+        hdr_point = row_inputs.addStringValueInput(f"chdr_pt_{counter}", "", "Vertex")
+        hdr_point.isReadOnly = True
+        hdr_count = row_inputs.addStringValueInput(f"chdr_ct_{counter}", "", "Curves")
+        hdr_count.isReadOnly = True
+        hdr_curves = row_inputs.addStringValueInput(f"chdr_cv_{counter}", "", "Connected To")
+        hdr_curves.isReadOnly = True
+        table.addCommandInput(hdr_cb, 0, 0)
+        table.addCommandInput(hdr_point, 0, 1)
+        table.addCommandInput(hdr_count, 0, 2)
+        table.addCommandInput(hdr_curves, 0, 3)
+
+        # Data rows — one per shared point
+        for i, entry in enumerate(entries):
+            row = i + 1
+            row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+
+            cb = row_inputs.addBoolValueInput(
+                f"ccheck_{counter}_{i}", "", True, "", False
+            )
+
+            pt_input = row_inputs.addStringValueInput(
+                f"cpt_{counter}_{i}", "", entry["point_label"]
+            )
+            pt_input.isReadOnly = True
+
+            count_input = row_inputs.addStringValueInput(
+                f"cct_{counter}_{i}", "", str(entry["count"])
+            )
+            count_input.isReadOnly = True
+
+            # Show connected curve labels
+            curve_names = ", ".join(c["curve_label"] for c in entry["curves"])
+            cv_input = row_inputs.addStringValueInput(
+                f"ccv_{counter}_{i}", "", curve_names
+            )
+            cv_input.isReadOnly = True
+
+            table.addCommandInput(cb, row, 0)
+            table.addCommandInput(pt_input, row, 1)
+            table.addCommandInput(count_input, row, 2)
+            table.addCommandInput(cv_input, row, 3)
+
+    except:
+        _log.error("Error populating connections tab: %s", traceback.format_exc())
+
+
 class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     """Fires when the user clicks the Constraint Manager button."""
 
@@ -222,8 +361,9 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs = cmd.commandInputs
 
             # Create tabs — first tab is active by default (D-02, ENTY-02)
-            tab_selected = inputs.addTabCommandInput("tab_selected", "Selected")
+            tab_selected = inputs.addTabCommandInput("tab_selected", "Selection")
             tab_types = inputs.addTabCommandInput("tab_types", "Types")
+            tab_connections = inputs.addTabCommandInput("tab_connections", "Shared Vertices")
 
             # --- Selected Entities tab (D-11: migrate v1.1 inputs into tab children) ---
             sel_inputs = tab_selected.children
@@ -262,6 +402,30 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 "typesEmpty", "", "No constraints in this sketch", 1, True
             )
             types_empty.isVisible = False
+
+            # --- Connections tab ---
+            conn_inputs = tab_connections.children
+
+            # Load button — enumerates shared SketchPoints in the sketch
+            conn_inputs.addBoolValueInput(
+                "loadConnectionsBtn", "Load Vertices", False, "", False
+            )
+
+            conn_table = conn_inputs.addTableCommandInput(
+                "connectionsTable", "Shared Vertices", 4, "1:2:1:4"
+            )
+            conn_table.maximumVisibleRows = 15
+            conn_table.minimumVisibleRows = 4
+
+            conn_sel_all = conn_inputs.addBoolValueInput(
+                "connSelectAllBtn", "Select All", False, "", False
+            )
+            conn_sel_all.isFullWidth = True
+
+            conn_empty = conn_inputs.addTextBoxCommandInput(
+                "connectionsEmpty", "", "No shared vertices in this sketch", 1, True
+            )
+            conn_empty.isVisible = False
 
             # Wire command-instance event handlers (D-06)
             _wire_handler(cmd.inputChanged, InputChangedHandler, _cmd_handlers)
@@ -326,10 +490,19 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             # Tab switch events — "APITabBar" is the undocumented id Fusion
             # fires when the user clicks a tab (not the tab's own id)
             if changed_input.id == "APITabBar":
-                for tab_id in ("tab_selected", "tab_types"):
+                cmd = args.firingEvent.sender
+                for tab_id in ("tab_selected", "tab_types", "tab_connections"):
                     tab = inputs.itemById(tab_id)
                     if tab and tab.isActive:
                         _active_tab = tab_id
+                        # Update OK button text per tab
+                        try:
+                            if tab_id == "tab_connections":
+                                cmd.okButtonText = "Unlink Vertices"
+                            else:
+                                cmd.okButtonText = "Delete Selected"
+                        except:
+                            pass
                         # Auto-populate Types tab on switch
                         if tab_id == "tab_types":
                             tab_types = inputs.itemById("tab_types")
@@ -343,6 +516,8 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
                 self._handle_selected_input(changed_input, inputs)
             elif _active_tab == "tab_types":
                 self._handle_types_input(changed_input, inputs)
+            elif _active_tab == "tab_connections":
+                self._handle_connections_input(changed_input, inputs)
         except:
             _log.error("InputChanged error: %s", traceback.format_exc())
         finally:
@@ -357,12 +532,28 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             changed_input.value = False
 
     def _handle_types_input(self, changed_input, inputs):
-        """Route inputs for the Constraint Types tab.
-
-        No special handling needed — checkboxes are read by ExecuteHandler
-        when user clicks Delete Selected (OK button).
-        """
+        """Route inputs for the Constraint Types tab."""
         pass
+
+    def _handle_connections_input(self, changed_input, inputs):
+        """Route inputs for the Shared Vertices tab."""
+        tab_conn = inputs.itemById("tab_connections")
+        if tab_conn:
+            conn_inputs = tab_conn.children
+        else:
+            conn_inputs = inputs
+
+        if changed_input.id == "loadConnectionsBtn":
+            changed_input.value = False
+            _populate_connections_tab(conn_inputs)
+        elif changed_input.id == "connSelectAllBtn":
+            changed_input.value = False
+            table = conn_inputs.itemById("connectionsTable")
+            if table and table.rowCount > 1:
+                for i in range(1, table.rowCount):
+                    cb = table.getInputAtPosition(i, 0)
+                    if cb and hasattr(cb, "value"):
+                        cb.value = True
 
     def _on_selection_changed(self, inputs):
         """Rebuild the constraint table for all selected entities."""
@@ -400,6 +591,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             infos = constraint_engine.enumerate_constraints(
                 entity, index_finder=_find_entity_index
             )
+
             for info in infos:
                 token = info.get("entity_token")
                 if token and token in seen_tokens:
@@ -511,117 +703,142 @@ class ExecutePreviewHandler(adsk.core.CommandEventHandler):
     def __init__(self):
         super().__init__()
 
+    def _draw_entity(self, cg_group, entity, color):
+        """Draw a single sketch entity as custom graphics."""
+        geom = getattr(entity, "worldGeometry", None)
+        if geom is None:
+            geom = getattr(entity, "geometry", None)
+        if geom is None:
+            return
+
+        geom_type = geom.objectType.split("::")[-1]
+
+        if geom_type == "Point3D":
+            coords = adsk.fusion.CustomGraphicsCoordinates.create(
+                [geom.x, geom.y, geom.z]
+            )
+            point_gfx = cg_group.addPointSet(
+                coords, [],
+                adsk.fusion.CustomGraphicsPointTypes.PointCloudCustomGraphicsPointType,
+                ""
+            )
+            point_gfx.color = color
+        else:
+            # Line3D, Arc3D, Circle3D, Ellipse3D, EllipticalArc3D, NurbsCurve3D
+            curve_gfx = cg_group.addCurve(geom)
+            curve_gfx.color = color
+            curve_gfx.weight = 3
+
+    def _cleanup_highlight(self, root):
+        """Remove previous highlight graphics group."""
+        for i in range(root.customGraphicsGroups.count - 1, -1, -1):
+            group = root.customGraphicsGroups.item(i)
+            if group.id == "constraintManagerHighlight":
+                group.deleteMe()
+
     def notify(self, args):
         try:
-            # Guard: don't redraw after execute has run
             if _completed:
                 return
 
-            # Only highlight on Types tab
-            if _active_tab != "tab_types":
+            # Only highlight on Types and Connections tabs
+            if _active_tab not in ("tab_types", "tab_connections"):
                 args.isValidResult = False
                 return
 
             cmd = args.command
             inputs = cmd.commandInputs
 
-            # Clean up previous custom graphics group
             design = adsk.fusion.Design.cast(_app.activeProduct)
             if not design:
                 args.isValidResult = False
                 return
             root = design.rootComponent
 
-            # Remove our previous highlight group if it exists
-            for i in range(root.customGraphicsGroups.count - 1, -1, -1):
-                group = root.customGraphicsGroups.item(i)
-                if group.id == "constraintManagerHighlight":
-                    group.deleteMe()
+            self._cleanup_highlight(root)
 
-            # Get checked type names
-            tab_types = inputs.itemById("tab_types")
-            if tab_types:
-                types_inputs = tab_types.children
-            else:
-                types_inputs = inputs
-
-            types_table = types_inputs.itemById("typesTable")
-            type_names = _tab_state["types"].get("type_names", [])
-
-            if not types_table or not type_names:
-                args.isValidResult = False
-                return
-
-            checked_types = []
-            for i in range(1, types_table.rowCount):
-                cb = types_table.getInputAtPosition(i, 0)
-                if cb and hasattr(cb, "value") and cb.value:
-                    type_idx = i - 1
-                    if type_idx < len(type_names):
-                        checked_types.append(type_names[type_idx])
-
-            if not checked_types:
-                args.isValidResult = False
-                return
-
-            # Get sketch and collect entities
-            sketch = design.activeEditObject
-            if not isinstance(sketch, adsk.fusion.Sketch):
-                args.isValidResult = False
-                return
-
-            entities = constraint_engine.collect_entities_for_types(
-                sketch.geometricConstraints, checked_types
-            )
-
-            if not entities:
-                args.isValidResult = False
-                return
-
-            # Create custom graphics group with identifiable id
-            cg_group = root.customGraphicsGroups.add()
-            cg_group.id = "constraintManagerHighlight"
-
-            # Highlight color — red for visibility against sketch geometry
             color = adsk.fusion.CustomGraphicsSolidColorEffect.create(
                 adsk.core.Color.create(255, 50, 50, 255)
             )
 
-            for entity in entities:
+            entities_to_draw = []
+
+            if _active_tab == "tab_types":
+                # Collect entities from checked constraint types
+                tab_types = inputs.itemById("tab_types")
+                if tab_types:
+                    types_inputs = tab_types.children
+                else:
+                    types_inputs = inputs
+
+                types_table = types_inputs.itemById("typesTable")
+                type_names = _tab_state["types"].get("type_names", [])
+
+                if not types_table or not type_names:
+                    args.isValidResult = False
+                    return
+
+                checked_types = []
+                for i in range(1, types_table.rowCount):
+                    cb = types_table.getInputAtPosition(i, 0)
+                    if cb and hasattr(cb, "value") and cb.value:
+                        type_idx = i - 1
+                        if type_idx < len(type_names):
+                            checked_types.append(type_names[type_idx])
+
+                if not checked_types:
+                    args.isValidResult = False
+                    return
+
+                sketch = design.activeEditObject
+                if not isinstance(sketch, adsk.fusion.Sketch):
+                    args.isValidResult = False
+                    return
+
+                entities_to_draw = constraint_engine.collect_entities_for_types(
+                    sketch.geometricConstraints, checked_types
+                )
+
+            elif _active_tab == "tab_connections":
+                # Collect all curves at each checked shared point
+                entries = _tab_state["connections"].get("entries", [])
+                tab_conn = inputs.itemById("tab_connections")
+                if tab_conn:
+                    conn_inputs = tab_conn.children
+                else:
+                    conn_inputs = inputs
+
+                conn_table = conn_inputs.itemById("connectionsTable")
+                if not conn_table or not entries:
+                    args.isValidResult = False
+                    return
+
+                for i in range(1, conn_table.rowCount):
+                    cb = conn_table.getInputAtPosition(i, 0)
+                    if cb and hasattr(cb, "value") and cb.value:
+                        entry_idx = i - 1
+                        if entry_idx < len(entries):
+                            entry = entries[entry_idx]
+                            # Add the point itself
+                            entities_to_draw.append(entry["point"])
+                            # Add all curves at this point
+                            for c in entry["curves"]:
+                                entities_to_draw.append(c["curve"])
+
+            if not entities_to_draw:
+                args.isValidResult = False
+                return
+
+            cg_group = root.customGraphicsGroups.add()
+            cg_group.id = "constraintManagerHighlight"
+
+            for entity in entities_to_draw:
                 try:
-                    # Use worldGeometry for model-space rendering
-                    geom = getattr(entity, "worldGeometry", None)
-                    if geom is None:
-                        geom = getattr(entity, "geometry", None)
-                    if geom is None:
-                        continue
-
-                    geom_type = geom.objectType.split("::")[-1]
-
-                    if geom_type == "Point3D":
-                        # Point3D is not Curve3D — use addPointSet
-                        coords = adsk.fusion.CustomGraphicsCoordinates.create(
-                            [geom.x, geom.y, geom.z]
-                        )
-                        point_gfx = cg_group.addPointSet(
-                            coords, [],
-                            adsk.fusion.CustomGraphicsPointTypes.PointCloudCustomGraphicsPointType,
-                            ""
-                        )
-                        point_gfx.color = color
-
-                    else:
-                        # Line3D, Arc3D, Circle3D, Ellipse3D, EllipticalArc3D, NurbsCurve3D
-                        curve_gfx = cg_group.addCurve(geom)
-                        curve_gfx.color = color
-                        curve_gfx.weight = 3
-
+                    self._draw_entity(cg_group, entity, color)
                 except:
-                    # Skip entities that fail — don't break the whole preview
                     continue
 
             # False = visual-only preview, Fusion rolls back before execute
-            # True would commit the graphics as a model change, breaking deletion
             args.isValidResult = False
 
         except:
@@ -698,6 +915,70 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                         result["skipped"]
                     )
                 return
+            elif _active_tab == "tab_connections":
+                # Detach all curves at each checked shared point
+                entries = _tab_state["connections"].get("entries", [])
+                tab_conn = inputs.itemById("tab_connections")
+                if tab_conn:
+                    conn_inputs = tab_conn.children
+                else:
+                    conn_inputs = inputs
+                conn_table = conn_inputs.itemById("connectionsTable")
+
+                if not conn_table or not entries:
+                    return
+
+                design = adsk.fusion.Design.cast(_app.activeProduct)
+                if not design:
+                    return
+
+                detached = 0
+                failed = 0
+                for i in range(1, conn_table.rowCount):
+                    cb = conn_table.getInputAtPosition(i, 0)
+                    if not (cb and hasattr(cb, "value") and cb.value):
+                        continue
+                    entry_idx = i - 1
+                    if entry_idx >= len(entries):
+                        continue
+
+                    entry = entries[entry_idx]
+
+                    # Re-resolve point from token
+                    pt_matches = design.findEntityByToken(entry["point_token"])
+                    if not pt_matches:
+                        failed += 1
+                        continue
+                    point = pt_matches[0]
+
+                    # Detach all curves except one (need at least one to stay)
+                    for curve_info in entry["curves"]:
+                        # Check if point is still shared (may have been
+                        # reduced by prior detach in this loop)
+                        connected = getattr(point, "connectedEntities", None)
+                        if not connected or connected.count < 2:
+                            break
+
+                        try:
+                            cv_matches = design.findEntityByToken(
+                                curve_info["curve_token"]
+                            )
+                            if not cv_matches:
+                                failed += 1
+                                continue
+                            curve = cv_matches[0]
+
+                            new_point = point.detach(curve)
+                            if new_point:
+                                detached += 1
+                            else:
+                                failed += 1
+                        except Exception as e:
+                            _log.error("Failed to detach: %s", e)
+                            failed += 1
+
+                _log.info("Detach: %d detached, %d failed", detached, failed)
+                return
             else:
                 return
 
@@ -767,6 +1048,7 @@ class DestroyHandler(adsk.core.CommandEventHandler):
         _tab_state["selected"]["constraints"] = []
         _tab_state["types"]["summary"] = {}
         _tab_state["types"]["type_names"] = []
+        _tab_state["connections"]["entries"] = []
         _active_tab = "tab_selected"
         _completed = False
 

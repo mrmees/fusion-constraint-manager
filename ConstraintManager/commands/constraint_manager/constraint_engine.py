@@ -54,11 +54,14 @@ def get_constraint_type_name(object_type):
     return name
 
 
-# Constraint type -> (property names referencing entities)
+# Constraint type -> (property names referencing sketch entities)
+# Ref: docs/fusion-api/constraint-types.md
 _CONSTRAINT_ENTITY_PROPS = {
+    # Single-entity constraints
     "HorizontalConstraint": ("line",),
     "VerticalConstraint": ("line",),
     "FixConstraint": ("entity",),
+    # Two-entity constraints
     "ParallelConstraint": ("lineOne", "lineTwo"),
     "PerpendicularConstraint": ("lineOne", "lineTwo"),
     "CollinearConstraint": ("lineOne", "lineTwo"),
@@ -70,7 +73,17 @@ _CONSTRAINT_ENTITY_PROPS = {
     "MidPointConstraint": ("point", "midPointCurve"),
     "HorizontalPointsConstraint": ("pointOne", "pointTwo"),
     "VerticalPointsConstraint": ("pointOne", "pointTwo"),
+    # Three-entity constraints
     "SymmetryConstraint": ("entityOne", "entityTwo", "symmetryLine"),
+    # Surface constraints (entity + BRepFace/ConstructionPlane)
+    "CoincidentToSurfaceConstraint": ("point",),
+    "LineOnPlanarSurfaceConstraint": ("line",),
+    "LineParallelToPlanarSurfaceConstraint": ("line",),
+    "PerpendicularToSurfaceConstraint": ("curve",),
+    # Pattern/polygon constraints (collection-based — entity props are arrays)
+    "CircularPatternConstraint": ("centerPoint",),
+    "RectangularPatternConstraint": (),
+    "PolygonConstraint": ("centerPoint",),
 }
 
 
@@ -156,6 +169,45 @@ def enumerate_constraints(entity, index_finder, include_dimensions=False):
             dim = entity.sketchDimensions.item(i)
             info = _build_constraint_info(dim, entity, index_finder)
             results.append(info)
+
+    return results
+
+
+def enumerate_point_connections(point, index_finder):
+    """Enumerate shared-endpoint connections for a SketchPoint.
+
+    When lines are drawn end-to-end in Fusion, the connection is a shared
+    SketchPoint — NOT a CoincidentConstraint. This function surfaces those
+    connections so users can see what's connected at a point.
+
+    Args:
+        point: A Fusion SketchPoint with .connectedEntities property.
+        index_finder: Callable(entity) -> int.
+
+    Returns:
+        List of dicts with keys:
+            - constraint: None (not a real constraint)
+            - entity_token: None
+            - type_name: "Connected"
+            - related_label: Label of the connected entity
+            - is_deletable: False (topology, not a constraint)
+            - source_label: will be set by caller
+    """
+    results = []
+    connected = getattr(point, "connectedEntities", None)
+    if connected is None:
+        return results
+
+    for i in range(connected.count):
+        entity = connected.item(i)
+        label = get_entity_label(entity, index_finder(entity))
+        results.append({
+            "constraint": None,
+            "entity_token": None,
+            "type_name": "Connected",
+            "related_label": label,
+            "is_deletable": False,
+        })
 
     return results
 
