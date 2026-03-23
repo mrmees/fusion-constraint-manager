@@ -246,9 +246,13 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
 
     def _on_selection_changed(self, inputs):
         """Rebuild the constraint table for all selected entities."""
-        # Access inputs through tab children (Pitfall 1 from RESEARCH.md)
+        # args.inputs may be root CommandInputs or tab children depending on
+        # Fusion version — handle both by checking for the tab first
         tab_selected = inputs.itemById("tab_selected")
-        sel_inputs = tab_selected.children
+        if tab_selected:
+            sel_inputs = tab_selected.children
+        else:
+            sel_inputs = inputs  # already inside the tab
         entity_select = sel_inputs.itemById("entitySelect")
         table = sel_inputs.itemById("constraintTable")
 
@@ -354,7 +358,10 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
     def _on_select_all(self, inputs):
         """Check all deletable constraint checkboxes (skip header row)."""
         tab_selected = inputs.itemById("tab_selected")
-        sel_inputs = tab_selected.children
+        if tab_selected:
+            sel_inputs = tab_selected.children
+        else:
+            sel_inputs = inputs
         table = sel_inputs.itemById("constraintTable")
         if not table or table.rowCount < 2:
             return
@@ -378,7 +385,10 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
             # Route by active tab
             if _active_tab == "tab_selected":
                 tab_selected = inputs.itemById("tab_selected")
-                sel_inputs = tab_selected.children
+                if tab_selected:
+                    sel_inputs = tab_selected.children
+                else:
+                    sel_inputs = inputs
                 table = sel_inputs.itemById("constraintTable")
                 constraints = _tab_state["selected"]["constraints"]
             else:
