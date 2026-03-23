@@ -95,7 +95,7 @@ The command module (`command.py`) handles all Fusion API UI interaction and can 
 
 ### Key Architecture Decisions
 
-- **Two-tab UI** — Selected (per-entity) and Types (sketch-wide). An "All Constraints" tab was considered but scrapped — the two tabs cover the highest-impact use cases without performance risk.
+- **Two-tab UI** — Selected (per-entity) and Types (sketch-wide), covering the highest-impact use cases without performance risk.
 - **`APITabBar` for tab detection** — Fusion fires `inputChanged` with `id="APITabBar"` on tab switch (undocumented but universal pattern). Check `tab.isActive` to determine which tab is now showing.
 - **`executePreview` for highlighting** — CustomGraphics overlays drawn in `executePreview` handler with `isValidResult=False` for visual-only preview that doesn't interfere with deletion.
 - **`inputChanged` is UI-only** — Fusion silently discards model changes in this event. All constraint deletions happen in the `execute` handler.
