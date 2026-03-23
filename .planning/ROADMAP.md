@@ -13,7 +13,7 @@ v1.1 ships a working per-entity constraint tool. v2.0 adds sketch-wide constrain
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Engine and Tab Foundation** - Extend the constraint engine, migrate to three-tab dialog, preserve v1.1 Selected Entities behavior (completed 2026-03-23)
-- [ ] **Phase 2: Constraint Types Tab** - Sketch-wide type summary with counts and bulk delete by type
+- [x] **Phase 2: Constraint Types Tab** - Sketch-wide type summary with counts and bulk delete by type (completed 2026-03-23)
 - [ ] **Phase 3: All Constraints Tab** - Full sketch constraint listing with Load button, type filter, and checkbox deletion
 
 ## Phase Details
@@ -45,10 +45,10 @@ Plans:
   2. User can select a constraint type row in the summary table
   3. User clicks "Delete All of Type" and all constraints of the selected type are removed from the sketch — none are skipped due to forward-iteration issues
   4. After bulk deletion, the Constraint Types table refreshes to reflect the updated counts
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — Build Types tab UI, auto-populate, and bulk delete by type
+- [x] 02-01-PLAN.md — Build Types tab UI, auto-populate, and bulk delete by type
 
 **UI hint**: yes
 
@@ -73,5 +73,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine and Tab Foundation | 2/2 | Complete   | 2026-03-23 |
-| 2. Constraint Types Tab | 0/1 | In progress | - |
+| 2. Constraint Types Tab | 1/1 | Complete   | 2026-03-23 |
 | 3. All Constraints Tab | 0/? | Not started | - |

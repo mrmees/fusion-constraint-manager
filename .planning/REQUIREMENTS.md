@@ -16,11 +16,11 @@ Requirements for v2.0 release. Each maps to roadmap phases.
 
 ### Constraint Types Tab
 
-- [ ] **TYPE-01**: Constraint Types tab displays a summary table showing each constraint type and its count for the active sketch
-- [ ] **TYPE-02**: Constraint Types tab auto-populates on tab activation (counting by type is lightweight)
-- [ ] **TYPE-03**: User can select a constraint type row in the summary table
-- [ ] **TYPE-04**: User can delete all constraints of the selected type via a toolbar "Delete All of Type" button
-- [ ] **TYPE-05**: Bulk deletion uses reverse iteration or snapshot-then-delete to avoid forward-iteration skip bug
+- [x] **TYPE-01**: Constraint Types tab displays a summary table showing each constraint type and its count for the active sketch
+- [x] **TYPE-02**: Constraint Types tab auto-populates on tab activation (counting by type is lightweight)
+- [x] **TYPE-03**: User can select a constraint type row in the summary table
+- [x] **TYPE-04**: User can delete all constraints of the selected type via a toolbar "Delete All of Type" button
+- [x] **TYPE-05**: Bulk deletion uses reverse iteration or snapshot-then-delete to avoid forward-iteration skip bug
 
 ### All Constraints Tab
 
@@ -85,11 +85,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TABS-02 | Phase 1 | Complete |
 | TABS-03 | Phase 1 | Complete |
 | TABS-04 | Phase 1 | Complete |
-| TYPE-01 | Phase 2 | Pending |
-| TYPE-02 | Phase 2 | Pending |
-| TYPE-03 | Phase 2 | Pending |
-| TYPE-04 | Phase 2 | Pending |
-| TYPE-05 | Phase 2 | Pending |
+| TYPE-01 | Phase 2 | Complete |
+| TYPE-02 | Phase 2 | Complete |
+| TYPE-03 | Phase 2 | Complete |
+| TYPE-04 | Phase 2 | Complete |
+| TYPE-05 | Phase 2 | Complete |
 | ALLC-01 | Phase 3 | Pending |
 | ALLC-02 | Phase 3 | Pending |
 | ALLC-03 | Phase 3 | Pending |
