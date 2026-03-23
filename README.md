@@ -1,3 +1,9 @@
+<human>
+
+Fusion constraint management sucks so bad.  So very very bad.  So I vibed this.  Trying to let AI fold the laundry.  
+
+</human>
+
 # Fusion Constraint Manager
 
 A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constraints. Two-tab interface: select entities to inspect individual constraints, or switch to the Types tab to see every constraint type in your sketch at a glance and nuke entire categories in one click.
