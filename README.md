@@ -6,13 +6,16 @@ Fusion constraint management sucks so bad.  So very very bad.  So I vibed this. 
 
 # Fusion Constraint Manager
 
-A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constraints. Two-tab interface: select entities to inspect individual constraints, or switch to the Types tab to see every constraint type in your sketch at a glance and nuke entire categories in one click.
+A Fusion 360 add-in for viewing, highlighting, and managing sketch constraints. Three-tab interface: select entities to inspect individual constraints, view and bulk-delete by constraint type, or find and detach shared vertices.
 
 ### Entity Selection
 ![Entity Selection](docs/images/entity_selection.PNG)
 
 ### Group Selection by Type
 ![Group Selection](docs/images/group_selection.PNG)
+
+### Shared Vertices
+![Shared Vertices](docs/images/shared_vertices.PNG)
 
 ## Features
 
@@ -29,6 +32,14 @@ A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constrai
 - **Viewport highlighting** — checked types highlight associated geometry in orange
 - **Bulk deletion** — Delete Selected removes all constraints of checked types
 - **Empty state** — clear message when sketch has no constraints
+
+### Shared Vertices Tab
+- **Shared endpoint detection** — finds all SketchPoints shared by 2+ curves
+- **One row per vertex** — shows point label, curve count, and names of connected curves
+- **Viewport highlighting** — checked vertices highlight all connected curves
+- **Detach** — "Unlink Vertices" separates curves from shared points (each gets its own endpoint)
+- **Select All** button for bulk operations
+- Requires Fusion March 2025+ (`SketchPoint.detach()` API)
 
 ### General
 - **Proper undo support** — all deletions committed via Fusion's command transaction (Ctrl+Z to undo)
@@ -70,6 +81,16 @@ A Fusion 360 add-in for viewing, highlighting, and bulk-deleting sketch constrai
 
 **DXF/SVG import tip:** After importing geometry, open the Types tab, check "Fix", and delete — removes all auto-applied Fix constraints in one shot.
 
+### Shared Vertices Tab — Detach Endpoints
+1. Enter sketch edit mode
+2. Click **Constraint Manager** → switch to **Shared Vertices** tab
+3. Click **Load Vertices** to scan the sketch
+4. Table shows each shared point, how many curves meet there, and which ones
+5. Check the vertices you want to break apart (curves highlight in the viewport)
+6. Click **Unlink Vertices** to detach — each curve gets its own independent endpoint
+
+**When to use:** Breaking apart imported geometry where everything is welded together, fixing accidental endpoint snaps, or separating curves that should move independently.
+
 ## Project Structure
 
 ```
@@ -101,7 +122,7 @@ The command module (`command.py`) handles all Fusion API UI interaction and can 
 
 ### Key Architecture Decisions
 
-- **Two-tab UI** — Selected (per-entity) and Types (sketch-wide), covering the highest-impact use cases without performance risk.
+- **Three-tab UI** — Selection (per-entity), Types (sketch-wide), and Shared Vertices (endpoint topology).
 - **`APITabBar` for tab detection** — Fusion fires `inputChanged` with `id="APITabBar"` on tab switch (undocumented but universal pattern). Check `tab.isActive` to determine which tab is now showing.
 - **`executePreview` for highlighting** — CustomGraphics overlays drawn in `executePreview` handler with `isValidResult=False` for visual-only preview that doesn't interfere with deletion.
 - **`inputChanged` is UI-only** — Fusion silently discards model changes in this event. All constraint deletions happen in the `execute` handler.
