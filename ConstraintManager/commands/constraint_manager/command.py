@@ -34,10 +34,6 @@ _tab_state = {
         "summary": {},          # {type_name: count}
         "type_names": [],       # Ordered list matching table row indices
     },
-    "all": {
-        "constraints": [],      # List of constraint info dicts — Phase 3
-        "loaded": False,        # Whether Load has been clicked — Phase 3
-    },
 }
 _active_tab = "tab_selected"
 _completed = False  # Guards executePreview from firing after execute
@@ -225,10 +221,9 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             inputs = cmd.commandInputs
 
-            # Create three tabs — first tab is active by default (D-02, ENTY-02)
+            # Create tabs — first tab is active by default (D-02, ENTY-02)
             tab_selected = inputs.addTabCommandInput("tab_selected", "Selected")
             tab_types = inputs.addTabCommandInput("tab_types", "Types")
-            tab_all = inputs.addTabCommandInput("tab_all", "All")
 
             # --- Selected Entities tab (D-11: migrate v1.1 inputs into tab children) ---
             sel_inputs = tab_selected.children
@@ -267,12 +262,6 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 "typesEmpty", "", "No constraints in this sketch", 1, True
             )
             types_empty.isVisible = False
-
-            # --- All tab placeholder (D-03) ---
-            all_inputs = tab_all.children
-            all_inputs.addTextBoxCommandInput(
-                "allPlaceholder", "", "Full constraint list will appear here.", 1, True
-            )
 
             # Wire command-instance event handlers (D-06)
             _wire_handler(cmd.inputChanged, InputChangedHandler, _cmd_handlers)
@@ -337,7 +326,7 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             # Tab switch events — "APITabBar" is the undocumented id Fusion
             # fires when the user clicks a tab (not the tab's own id)
             if changed_input.id == "APITabBar":
-                for tab_id in ("tab_selected", "tab_types", "tab_all"):
+                for tab_id in ("tab_selected", "tab_types"):
                     tab = inputs.itemById(tab_id)
                     if tab and tab.isActive:
                         _active_tab = tab_id
@@ -710,7 +699,6 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                     )
                 return
             else:
-                # tab_all execution handled in Phase 3
                 return
 
             if not constraints or not table:
@@ -779,8 +767,6 @@ class DestroyHandler(adsk.core.CommandEventHandler):
         _tab_state["selected"]["constraints"] = []
         _tab_state["types"]["summary"] = {}
         _tab_state["types"]["type_names"] = []
-        _tab_state["all"]["constraints"] = []
-        _tab_state["all"]["loaded"] = False
         _active_tab = "tab_selected"
         _completed = False
 

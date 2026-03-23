@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Fusion (Autodesk Fusion 360) desktop add-in that gives users a comprehensive constraint management interface for sketches. v1.1 shipped a command-based tool for viewing and selectively deleting constraints on selected entities. v2.0 evolves the UI into a three-tab interface that adds sketch-wide constraint type summaries with bulk deletion, and a full constraint list with type filtering — filling the largest unmet needs in the Fusion constraint management space.
+A Fusion (Autodesk Fusion 360) desktop add-in that gives users a comprehensive constraint management interface for sketches. v1.1 shipped a command-based tool for viewing and selectively deleting constraints on selected entities. v2.0 evolves the UI into a two-tab interface: the original per-entity view plus a new sketch-wide constraint type summary with bulk deletion and viewport highlighting — filling the largest unmet needs in the Fusion constraint management space.
 
 ## Core Value
 
@@ -19,7 +19,7 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 - ✓ Related entity display for each constraint — v1.0
 - ✓ Toolbar button in DESIGN workspace with proper lifecycle — v1.0
 - ✓ Entity token re-resolution for safe deletion across event boundaries — v1.1
-- ✓ Three-tab command dialog (Selected Entities, Constraint Types, All Constraints) — Phase 1
+- ✓ Two-tab command dialog (Selected Entities, Constraint Types) — Phase 1 (originally three tabs; All tab scrapped during Phase 3 discussion)
 - ✓ Selected Entities tab preserves v1 behavior exactly — Phase 1
 - ✓ Sketch-wide constraint enumeration engine — Phase 1
 - ✓ Type grouping/counting/filtering engine functions — Phase 1
@@ -30,13 +30,11 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 
 ### Active
 
-- [ ] **All Constraints tab**: Full list of every constraint in the active sketch with explicit "Load" button
-- [ ] **All Constraints tab**: Type column (sortable) for each constraint row
-- [ ] **All Constraints tab**: Dropdown filter by constraint type
-- [ ] **All Constraints tab**: Checkbox selection + delete for individual constraints
+(None — v2.0 scope complete)
 
 ### Out of Scope
 
+- All Constraints tab — deferred to v2.1+ if community requests it (Selected + Types tabs cover the highest-impact use cases)
 - Dimension constraints — deferred to future release (v2.x), geometric constraints only for now
 - Under-constrained diagnostics — deferred to future release
 - Auto-constraint interception — Fusion API doesn't support intercepting constraints as they're created
@@ -67,7 +65,7 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Three-tab UI (Selected Entities / Constraint Types / All Constraints) | Covers three distinct workflows: surgical precision, bulk type ops, and full sketch audit | — Pending |
+| Two-tab UI (Selected / Types) | Covers the two highest-impact workflows: surgical precision and bulk type ops. All tab scrapped — insufficient value over the other two. | ✓ Good |
 | Explicit Load button on All Constraints tab | Prevents UI hang on massive sketches — user opts in to expensive enumeration | — Pending |
 | Constraint Types tab uses count + Delete All per type | Lightweight summary is more useful than listing every constraint for bulk ops (DXF import cleanup) | — Pending |
 | v2.0 version bump | Three-tab UI is a fundamentally different UX, not an incremental patch | — Pending |
@@ -92,4 +90,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after Phase 2 completion*
+*Last updated: 2026-03-23 after Phase 3 scrapped, v2.0 scope complete*
