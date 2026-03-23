@@ -39,10 +39,10 @@ Requirements for v2.0 release. Each maps to roadmap phases.
 
 ### Engine
 
-- [ ] **ENGN-01**: Constraint engine supports sketch-wide enumeration via `sketch.geometricConstraints` collection
-- [ ] **ENGN-02**: Constraint engine supports grouping/counting constraints by type
-- [ ] **ENGN-03**: Constraint engine supports filtering constraints by type
-- [ ] **ENGN-04**: Bulk deletion uses reverse iteration to prevent forward-iteration collection re-index bug
+- [x] **ENGN-01**: Constraint engine supports sketch-wide enumeration via `sketch.geometricConstraints` collection
+- [x] **ENGN-02**: Constraint engine supports grouping/counting constraints by type
+- [x] **ENGN-03**: Constraint engine supports filtering constraints by type
+- [x] **ENGN-04**: Bulk deletion uses reverse iteration to prevent forward-iteration collection re-index bug
 
 ## v2 Requirements
 
@@ -99,10 +99,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALLC-07 | Phase 3 | Pending |
 | ENTY-01 | Phase 1 | Pending |
 | ENTY-02 | Phase 1 | Pending |
-| ENGN-01 | Phase 1 | Pending |
-| ENGN-02 | Phase 1 | Pending |
-| ENGN-03 | Phase 1 | Pending |
-| ENGN-04 | Phase 1 | Pending |
+| ENGN-01 | Phase 1 | Complete |
+| ENGN-02 | Phase 1 | Complete |
+| ENGN-03 | Phase 1 | Complete |
+| ENGN-04 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 22 total

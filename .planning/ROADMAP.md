@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Extend constraint engine with sketch-wide functions (TDD)
+- [x] 01-01-PLAN.md — Extend constraint engine with sketch-wide functions (TDD)
 - [ ] 01-02-PLAN.md — Migrate to three-tab dialog, preserve v1.1 Selected Entities behavior
 
 **UI hint**: yes
