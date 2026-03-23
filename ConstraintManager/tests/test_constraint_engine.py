@@ -335,3 +335,269 @@ def test_delete_batch_reverse_order():
     c3 = OrderedConstraint("third")
     delete_constraints([c1, c2, c3])
     assert deletion_order == ["third", "second", "first"]
+
+
+# --- Sketch-wide engine tests ---
+
+# MockCollection already works as a GeometricConstraints mock (.count, .item(i))
+
+
+# -- aggregate_constraint_types tests --
+
+def test_aggregate_constraint_types_empty():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        aggregate_constraint_types,
+    )
+    constraints = MockCollection([])
+    result = aggregate_constraint_types(constraints)
+    assert result == {}
+
+
+def test_aggregate_constraint_types_basic():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        aggregate_constraint_types,
+    )
+    constraints = MockCollection([
+        MockConstraint("HorizontalConstraint"),
+        MockConstraint("HorizontalConstraint"),
+        MockConstraint("FixConstraint"),
+        MockConstraint("ParallelConstraint"),
+    ])
+    result = aggregate_constraint_types(constraints)
+    assert result == {"Horizontal": 2, "Fix": 1, "Parallel": 1}
+
+
+def test_aggregate_constraint_types_single():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        aggregate_constraint_types,
+    )
+    constraints = MockCollection([
+        MockConstraint("FixConstraint"),
+    ])
+    result = aggregate_constraint_types(constraints)
+    assert result == {"Fix": 1}
+
+
+def test_aggregate_constraint_types_unknown():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        aggregate_constraint_types,
+    )
+    constraints = MockCollection([
+        MockConstraint("BrandNewConstraint"),
+    ])
+    result = aggregate_constraint_types(constraints)
+    assert result == {"BrandNew": 1}
+
+
+# -- enumerate_all_constraints tests --
+
+def test_enumerate_all_constraints_empty():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    constraints = MockCollection([])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    assert result == []
+
+
+def test_enumerate_all_constraints_returns_list():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    line = _make_entity("SketchLine", index=0)
+    constraints = MockCollection([
+        MockConstraint("HorizontalConstraint", line=line),
+        MockConstraint("FixConstraint", entity=line),
+    ])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    assert len(result) == 2
+
+
+def test_enumerate_all_constraints_dict_keys():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    line = _make_entity("SketchLine", index=0)
+    constraints = MockCollection([
+        MockConstraint("HorizontalConstraint", line=line),
+    ])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    info = result[0]
+    assert "constraint" in info
+    assert "entity_token" in info
+    assert "type_name" in info
+    assert "entities_label" in info
+    assert "is_deletable" in info
+
+
+def test_enumerate_all_constraints_single_entity_label():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    line = _make_entity("SketchLine", index=2)
+    constraint = MockConstraint("FixConstraint", entity=line)
+    constraints = MockCollection([constraint])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    assert result[0]["entities_label"] == "Line #2"
+
+
+def test_enumerate_all_constraints_two_entity_label():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    line_a = _make_entity("SketchLine", index=0)
+    line_b = _make_entity("SketchLine", index=3)
+    constraint = MockConstraint("ParallelConstraint", lineOne=line_a, lineTwo=line_b)
+    constraints = MockCollection([constraint])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    assert result[0]["entities_label"] == "Line #0, Line #3"
+
+
+def test_enumerate_all_constraints_none_token():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        enumerate_all_constraints,
+    )
+    line = _make_entity("SketchLine", index=0)
+    constraint = MockConstraint("HorizontalConstraint", line=line)
+    # No entityToken set — getattr fallback should give None
+    constraints = MockCollection([constraint])
+    result = enumerate_all_constraints(constraints, _mock_index_finder)
+    assert result[0]["entity_token"] is None
+
+
+# -- filter_constraints_by_type tests --
+
+def test_filter_constraints_by_type_empty():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        filter_constraints_by_type,
+    )
+    result = filter_constraints_by_type([], "Fix")
+    assert result == []
+
+
+def test_filter_constraints_by_type_matches():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        filter_constraints_by_type,
+    )
+    items = [
+        {"type_name": "Fix", "constraint": "a"},
+        {"type_name": "Horizontal", "constraint": "b"},
+        {"type_name": "Fix", "constraint": "c"},
+    ]
+    result = filter_constraints_by_type(items, "Fix")
+    assert len(result) == 2
+    assert all(r["type_name"] == "Fix" for r in result)
+
+
+def test_filter_constraints_by_type_no_matches():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        filter_constraints_by_type,
+    )
+    items = [
+        {"type_name": "Fix", "constraint": "a"},
+    ]
+    result = filter_constraints_by_type(items, "Parallel")
+    assert result == []
+
+
+def test_filter_constraints_by_type_case_sensitive():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        filter_constraints_by_type,
+    )
+    items = [
+        {"type_name": "Fix", "constraint": "a"},
+    ]
+    result = filter_constraints_by_type(items, "fix")
+    assert result == []
+
+
+# -- collect_constraints_by_type tests --
+
+def test_collect_constraints_by_type_empty():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        collect_constraints_by_type,
+    )
+    constraints = MockCollection([])
+    result = collect_constraints_by_type(constraints, "Fix")
+    assert result == []
+
+
+def test_collect_constraints_by_type_returns_raw_objects():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        collect_constraints_by_type,
+    )
+    c1 = MockConstraint("FixConstraint")
+    c2 = MockConstraint("HorizontalConstraint")
+    constraints = MockCollection([c1, c2])
+    result = collect_constraints_by_type(constraints, "Fix")
+    assert len(result) == 1
+    assert result[0] is c1
+
+
+def test_collect_constraints_by_type_no_match():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        collect_constraints_by_type,
+    )
+    c1 = MockConstraint("FixConstraint")
+    constraints = MockCollection([c1])
+    result = collect_constraints_by_type(constraints, "Parallel")
+    assert result == []
+
+
+def test_collect_constraints_by_type_multiple():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        collect_constraints_by_type,
+    )
+    c1 = MockConstraint("FixConstraint")
+    c2 = MockConstraint("HorizontalConstraint")
+    c3 = MockConstraint("FixConstraint")
+    constraints = MockCollection([c1, c2, c3])
+    result = collect_constraints_by_type(constraints, "Fix")
+    assert len(result) == 2
+    assert c1 in result
+    assert c3 in result
+
+
+# -- _build_sketch_constraint_info tests --
+
+def test_build_sketch_constraint_info_entities_label_key():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        _build_sketch_constraint_info,
+    )
+    line = _make_entity("SketchLine", index=0)
+    constraint = MockConstraint("HorizontalConstraint", line=line)
+    result = _build_sketch_constraint_info(constraint, _mock_index_finder)
+    assert "entities_label" in result
+    assert "related_label" not in result
+
+
+def test_build_sketch_constraint_info_single_entity():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        _build_sketch_constraint_info,
+    )
+    line = _make_entity("SketchLine", index=5)
+    constraint = MockConstraint("HorizontalConstraint", line=line)
+    result = _build_sketch_constraint_info(constraint, _mock_index_finder)
+    assert result["entities_label"] == "Line #5"
+
+
+def test_build_sketch_constraint_info_two_entities():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        _build_sketch_constraint_info,
+    )
+    line_a = _make_entity("SketchLine", index=1)
+    line_b = _make_entity("SketchLine", index=4)
+    constraint = MockConstraint("ParallelConstraint", lineOne=line_a, lineTwo=line_b)
+    result = _build_sketch_constraint_info(constraint, _mock_index_finder)
+    assert result["entities_label"] == "Line #1, Line #4"
+
+
+def test_build_sketch_constraint_info_unknown_type():
+    from ConstraintManager.commands.constraint_manager.constraint_engine import (
+        _build_sketch_constraint_info,
+    )
+    constraint = MockConstraint("BrandNewConstraint")
+    result = _build_sketch_constraint_info(constraint, _mock_index_finder)
+    assert result["type_name"] == "Unknown (BrandNewConstraint)"
+    assert result["is_deletable"] is False
+    assert result["entities_label"] == "--"
