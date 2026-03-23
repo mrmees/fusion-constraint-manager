@@ -45,7 +45,11 @@ Plans:
   2. User can select a constraint type row in the summary table
   3. User clicks "Delete All of Type" and all constraints of the selected type are removed from the sketch — none are skipped due to forward-iteration issues
   4. After bulk deletion, the Constraint Types table refreshes to reflect the updated counts
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Build Types tab UI, auto-populate, and bulk delete by type
+
 **UI hint**: yes
 
 ### Phase 3: All Constraints Tab
@@ -69,5 +73,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine and Tab Foundation | 2/2 | Complete   | 2026-03-23 |
-| 2. Constraint Types Tab | 0/? | Not started | - |
+| 2. Constraint Types Tab | 0/1 | In progress | - |
 | 3. All Constraints Tab | 0/? | Not started | - |
