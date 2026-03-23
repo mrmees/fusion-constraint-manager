@@ -101,6 +101,96 @@ def stop():
     _cmd_handlers = []
 
 
+def _populate_types_tab(inputs):
+    """Populate the Constraint Types table with type counts from active sketch."""
+    try:
+        # Navigate to types tab inputs (Phase 1 bugfix pattern: fallback if already scoped)
+        tab_types = inputs.itemById("tab_types")
+        if tab_types:
+            types_inputs = tab_types.children
+        else:
+            types_inputs = inputs
+
+        table = types_inputs.itemById("typesTable")
+        empty_msg = types_inputs.itemById("typesEmpty")
+        status_msg = types_inputs.itemById("typesStatus")
+        delete_btn = types_inputs.itemById("deleteTypeBtn")
+
+        # Clear existing rows (reverse iteration)
+        for i in range(table.rowCount - 1, -1, -1):
+            table.deleteRow(i)
+
+        # Clear any pending delete from previous populate
+        _tab_state["types"]["pending_delete"] = None
+        if status_msg:
+            status_msg.formattedText = ""
+            status_msg.isVisible = False
+
+        # Get active sketch and aggregate
+        design = adsk.fusion.Design.cast(_app.activeProduct)
+        if not design:
+            return
+        sketch = design.activeEditObject
+        if not isinstance(sketch, adsk.fusion.Sketch):
+            return
+
+        summary = constraint_engine.aggregate_constraint_types(
+            sketch.geometricConstraints
+        )
+        _tab_state["types"]["summary"] = summary
+
+        # Empty state (D-07)
+        if not summary:
+            if empty_msg:
+                empty_msg.isVisible = True
+            table.isVisible = False
+            if delete_btn:
+                delete_btn.isVisible = False
+            return
+
+        if empty_msg:
+            empty_msg.isVisible = False
+        table.isVisible = True
+        if delete_btn:
+            delete_btn.isVisible = True
+
+        # Unique ID counter to avoid duplicate input IDs on re-populate
+        counter = _tab_state["types"].get("row_counter", 0)
+        _tab_state["types"]["row_counter"] = counter + 1
+
+        row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+
+        # Header row
+        hdr_type = row_inputs.addStringValueInput(
+            f"thdr_type_{counter}", "", "Type"
+        )
+        hdr_type.isReadOnly = True
+        hdr_count = row_inputs.addStringValueInput(
+            f"thdr_count_{counter}", "", "Count"
+        )
+        hdr_count.isReadOnly = True
+        table.addCommandInput(hdr_type, 0, 0)
+        table.addCommandInput(hdr_count, 0, 1)
+
+        # Data rows (sorted alphabetically by type name)
+        for i, (type_name, count) in enumerate(sorted(summary.items())):
+            row = i + 1
+            row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+            name_input = row_inputs.addStringValueInput(
+                f"tname_{counter}_{i}", "", type_name
+            )
+            name_input.isReadOnly = True
+            count_input = row_inputs.addStringValueInput(
+                f"tcount_{counter}_{i}", "", str(count)
+            )
+            count_input.isReadOnly = True
+            table.addCommandInput(name_input, row, 0)
+            table.addCommandInput(count_input, row, 1)
+
+    except:
+        _log.error("Error populating types tab: %s", traceback.format_exc())
+
+
 class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     """Fires when the user clicks the Constraint Manager button."""
 
@@ -150,11 +240,29 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             )
             sel_all.isFullWidth = True
 
-            # --- Types tab placeholder (D-03) ---
+            # --- Types tab (Phase 2) ---
             types_inputs = tab_types.children
-            types_inputs.addTextBoxCommandInput(
-                "typesPlaceholder", "", "Constraint type summary will appear here.", 1, True
+
+            types_table = types_inputs.addTableCommandInput(
+                "typesTable", "Constraint Types", 2, "3:1"
             )
+            types_table.maximumVisibleRows = 15
+            types_table.minimumVisibleRows = 4
+
+            # Toolbar delete button (D-03: acts on selectedRow)
+            delete_type_btn = types_inputs.addBoolValueInput(
+                "deleteTypeBtn", "Delete All of Type", False, "", False
+            )
+            types_table.addToolbarCommandInput(delete_type_btn)
+
+            # Status message for pending delete action
+            types_inputs.addTextBoxCommandInput("typesStatus", "", "", 1, True)
+
+            # Empty state (D-07: shown when sketch has zero constraints)
+            types_empty = types_inputs.addTextBoxCommandInput(
+                "typesEmpty", "", "No constraints in this sketch", 1, True
+            )
+            types_empty.isVisible = False
 
             # --- All tab placeholder (D-03) ---
             all_inputs = tab_all.children
@@ -225,6 +333,9 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             if changed_input.objectType.endswith("TabCommandInput"):
                 if changed_input.isActive:
                     _active_tab = changed_input.id
+                    # Auto-populate Types tab on switch (D-02)
+                    if changed_input.id == "tab_types":
+                        _populate_types_tab(inputs)
                 return
 
             # Route to active tab's handler (TABS-02: no re-enumeration on switch)
