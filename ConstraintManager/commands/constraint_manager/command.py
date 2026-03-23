@@ -32,7 +32,7 @@ _tab_state = {
     },
     "types": {
         "summary": {},          # {type_name: count}
-        "pending_delete": None, # Type name awaiting deletion
+        "type_names": [],       # Ordered list matching table row indices
     },
     "all": {
         "constraints": [],      # List of constraint info dicts — Phase 3
@@ -102,30 +102,25 @@ def stop():
     _cmd_handlers = []
 
 
-def _populate_types_tab(inputs):
-    """Populate the Constraint Types table with type counts from active sketch."""
-    try:
-        # Navigate to types tab inputs (Phase 1 bugfix pattern: fallback if already scoped)
-        tab_types = inputs.itemById("tab_types")
-        if tab_types:
-            types_inputs = tab_types.children
-        else:
-            types_inputs = inputs
+def _populate_types_tab(types_inputs):
+    """Populate the Constraint Types table with type counts from active sketch.
 
+    Each row has a checkbox, type name, and count — same pattern as the
+    Selected Entities tab. Users check types to delete, then click
+    "Delete Selected" (OK button).
+
+    Args:
+        types_inputs: The Types tab's CommandInputs (tab_types.children or
+            equivalent if already scoped).
+    """
+    try:
         table = types_inputs.itemById("typesTable")
         empty_msg = types_inputs.itemById("typesEmpty")
-        status_msg = types_inputs.itemById("typesStatus")
-        delete_btn = types_inputs.itemById("deleteTypeBtn")
 
         # Clear existing rows (reverse iteration)
-        for i in range(table.rowCount - 1, -1, -1):
-            table.deleteRow(i)
-
-        # Clear any pending delete from previous populate
-        _tab_state["types"]["pending_delete"] = None
-        if status_msg:
-            status_msg.formattedText = ""
-            status_msg.isVisible = False
+        if table:
+            for i in range(table.rowCount - 1, -1, -1):
+                table.deleteRow(i)
 
         # Get active sketch and aggregate
         design = adsk.fusion.Design.cast(_app.activeProduct)
@@ -140,20 +135,22 @@ def _populate_types_tab(inputs):
         )
         _tab_state["types"]["summary"] = summary
 
+        # Build ordered list of type names for index lookup in ExecuteHandler
+        type_names = sorted(summary.keys())
+        _tab_state["types"]["type_names"] = type_names
+
         # Empty state (D-07)
         if not summary:
             if empty_msg:
                 empty_msg.isVisible = True
-            table.isVisible = False
-            if delete_btn:
-                delete_btn.isVisible = False
+            if table:
+                table.isVisible = False
             return
 
         if empty_msg:
             empty_msg.isVisible = False
-        table.isVisible = True
-        if delete_btn:
-            delete_btn.isVisible = True
+        if table:
+            table.isVisible = True
 
         # Unique ID counter to avoid duplicate input IDs on re-populate
         counter = _tab_state["types"].get("row_counter", 0)
@@ -162,6 +159,10 @@ def _populate_types_tab(inputs):
         row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
 
         # Header row
+        hdr_cb = row_inputs.addStringValueInput(
+            f"thdr_cb_{counter}", "", ""
+        )
+        hdr_cb.isReadOnly = True
         hdr_type = row_inputs.addStringValueInput(
             f"thdr_type_{counter}", "", "Type"
         )
@@ -170,23 +171,33 @@ def _populate_types_tab(inputs):
             f"thdr_count_{counter}", "", "Count"
         )
         hdr_count.isReadOnly = True
-        table.addCommandInput(hdr_type, 0, 0)
-        table.addCommandInput(hdr_count, 0, 1)
+        table.addCommandInput(hdr_cb, 0, 0)
+        table.addCommandInput(hdr_type, 0, 1)
+        table.addCommandInput(hdr_count, 0, 2)
 
-        # Data rows (sorted alphabetically by type name)
-        for i, (type_name, count) in enumerate(sorted(summary.items())):
+        # Data rows: checkbox | type name | count
+        for i, type_name in enumerate(type_names):
             row = i + 1
+            count = summary[type_name]
             row_inputs = adsk.core.CommandInputs.cast(table.commandInputs)
+
+            cb = row_inputs.addBoolValueInput(
+                f"tcheck_{counter}_{i}", "", True, "", False
+            )
+
             name_input = row_inputs.addStringValueInput(
                 f"tname_{counter}_{i}", "", type_name
             )
             name_input.isReadOnly = True
+
             count_input = row_inputs.addStringValueInput(
                 f"tcount_{counter}_{i}", "", str(count)
             )
             count_input.isReadOnly = True
-            table.addCommandInput(name_input, row, 0)
-            table.addCommandInput(count_input, row, 1)
+
+            table.addCommandInput(cb, row, 0)
+            table.addCommandInput(name_input, row, 1)
+            table.addCommandInput(count_input, row, 2)
 
     except:
         _log.error("Error populating types tab: %s", traceback.format_exc())
@@ -245,19 +256,10 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             types_inputs = tab_types.children
 
             types_table = types_inputs.addTableCommandInput(
-                "typesTable", "Constraint Types", 2, "3:1"
+                "typesTable", "Constraint Types", 3, "1:3:1"
             )
             types_table.maximumVisibleRows = 15
             types_table.minimumVisibleRows = 4
-
-            # Toolbar delete button (D-03: acts on selectedRow)
-            delete_type_btn = types_inputs.addBoolValueInput(
-                "deleteTypeBtn", "Delete All of Type", False, "", False
-            )
-            types_table.addToolbarCommandInput(delete_type_btn)
-
-            # Status message for pending delete action
-            types_inputs.addTextBoxCommandInput("typesStatus", "", "", 1, True)
 
             # Empty state (D-07: shown when sketch has zero constraints)
             types_empty = types_inputs.addTextBoxCommandInput(
@@ -330,13 +332,19 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             changed_input = args.input
             inputs = args.inputs
 
-            # Tab switch events — update active tab tracker (D-07)
-            if changed_input.objectType.endswith("TabCommandInput"):
-                if changed_input.isActive:
-                    _active_tab = changed_input.id
-                    # Auto-populate Types tab on switch (D-02)
-                    if changed_input.id == "tab_types":
-                        _populate_types_tab(inputs)
+            # Tab switch events — "APITabBar" is the undocumented id Fusion
+            # fires when the user clicks a tab (not the tab's own id)
+            if changed_input.id == "APITabBar":
+                for tab_id in ("tab_selected", "tab_types", "tab_all"):
+                    tab = inputs.itemById(tab_id)
+                    if tab and tab.isActive:
+                        _active_tab = tab_id
+                        # Auto-populate Types tab on switch
+                        if tab_id == "tab_types":
+                            tab_types = inputs.itemById("tab_types")
+                            if tab_types:
+                                _populate_types_tab(tab_types.children)
+                        break
                 return
 
             # Route to active tab's handler (TABS-02: no re-enumeration on switch)
@@ -358,54 +366,12 @@ class InputChangedHandler(adsk.core.InputChangedEventHandler):
             changed_input.value = False
 
     def _handle_types_input(self, changed_input, inputs):
-        """Route inputs for the Constraint Types tab."""
-        if changed_input.id != "deleteTypeBtn":
-            return
+        """Route inputs for the Constraint Types tab.
 
-        # Reset button value immediately
-        changed_input.value = False
-
-        # Navigate to types tab (Phase 1 fallback pattern)
-        tab_types = inputs.itemById("tab_types")
-        if tab_types:
-            types_inputs = tab_types.children
-        else:
-            types_inputs = inputs
-
-        table = types_inputs.itemById("typesTable")
-        status_msg = types_inputs.itemById("typesStatus")
-
-        if not table:
-            return
-
-        selected_row = table.selectedRow
-        # Row 0 is header, -1 means no selection
-        if selected_row <= 0:
-            if status_msg:
-                status_msg.formattedText = "Select a constraint type row first."
-                status_msg.isVisible = True
-            return
-
-        # Extract type name from selected row, column 0
-        type_name_input = table.getInputAtPosition(selected_row, 0)
-        if not type_name_input:
-            return
-        type_name = type_name_input.value
-
-        # Look up count from cached summary
-        summary = _tab_state["types"].get("summary", {})
-        count = summary.get(type_name, "?")
-
-        # Store pending delete for ExecuteHandler
-        _tab_state["types"]["pending_delete"] = type_name
-
-        # Show status message
-        if status_msg:
-            status_msg.formattedText = (
-                f"Ready to delete all <b>{count}</b> <b>{type_name}</b> "
-                f"constraints. Click 'Delete Selected' to confirm."
-            )
-            status_msg.isVisible = True
+        No special handling needed — checkboxes are read by ExecuteHandler
+        when user clicks Delete Selected (OK button).
+        """
+        pass
 
     def _on_selection_changed(self, inputs):
         """Rebuild the constraint table for all selected entities."""
@@ -555,8 +521,28 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 table = sel_inputs.itemById("constraintTable")
                 constraints = _tab_state["selected"]["constraints"]
             elif _active_tab == "tab_types":
-                pending = _tab_state["types"].get("pending_delete")
-                if not pending:
+                # Read checked type rows and delete all constraints of those types
+                tab_types = inputs.itemById("tab_types")
+                if tab_types:
+                    types_inputs = tab_types.children
+                else:
+                    types_inputs = inputs
+                types_table = types_inputs.itemById("typesTable")
+                type_names = _tab_state["types"].get("type_names", [])
+
+                if not types_table or not type_names:
+                    return
+
+                # Collect checked type names (skip row 0 = header)
+                types_to_delete = []
+                for i in range(1, types_table.rowCount):
+                    cb = types_table.getInputAtPosition(i, 0)
+                    if cb and hasattr(cb, "value") and cb.value:
+                        type_idx = i - 1
+                        if type_idx < len(type_names):
+                            types_to_delete.append(type_names[type_idx])
+
+                if not types_to_delete:
                     return
 
                 design = adsk.fusion.Design.cast(_app.activeProduct)
@@ -566,18 +552,17 @@ class ExecuteHandler(adsk.core.CommandEventHandler):
                 if not isinstance(sketch, adsk.fusion.Sketch):
                     return
 
-                # Snapshot constraints of this type, then delete in reverse (TYPE-05)
-                targets = constraint_engine.collect_constraints_by_type(
-                    sketch.geometricConstraints, pending
-                )
-                result = constraint_engine.delete_constraints(targets)
-                _log.info(
-                    "Bulk delete '%s': deleted=%d, failed=%d, skipped=%d",
-                    pending, result["deleted"], result["failed"], result["skipped"]
-                )
-
-                # Clear pending state
-                _tab_state["types"]["pending_delete"] = None
+                # Delete each checked type (TYPE-05: reverse iteration via engine)
+                for type_name in types_to_delete:
+                    targets = constraint_engine.collect_constraints_by_type(
+                        sketch.geometricConstraints, type_name
+                    )
+                    result = constraint_engine.delete_constraints(targets)
+                    _log.info(
+                        "Bulk delete '%s': deleted=%d, failed=%d, skipped=%d",
+                        type_name, result["deleted"], result["failed"],
+                        result["skipped"]
+                    )
                 return
             else:
                 # tab_all execution handled in Phase 3
@@ -635,7 +620,7 @@ class DestroyHandler(adsk.core.CommandEventHandler):
         _cmd_handlers = []
         _tab_state["selected"]["constraints"] = []
         _tab_state["types"]["summary"] = {}
-        _tab_state["types"]["pending_delete"] = None
+        _tab_state["types"]["type_names"] = []
         _tab_state["all"]["constraints"] = []
         _tab_state["all"]["loaded"] = False
         _active_tab = "tab_selected"
