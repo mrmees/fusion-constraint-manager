@@ -12,7 +12,7 @@ v1.1 ships a working per-entity constraint tool. v2.0 adds sketch-wide constrain
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Engine and Tab Foundation** - Extend the constraint engine, migrate to three-tab dialog, preserve v1.1 Selected Entities behavior
+- [x] **Phase 1: Engine and Tab Foundation** - Extend the constraint engine, migrate to three-tab dialog, preserve v1.1 Selected Entities behavior (completed 2026-03-23)
 - [ ] **Phase 2: Constraint Types Tab** - Sketch-wide type summary with counts and bulk delete by type
 - [ ] **Phase 3: All Constraints Tab** - Full sketch constraint listing with Load button, type filter, and checkbox deletion
 
@@ -28,11 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Selected Entities tab is active by default on command launch
   4. Switching between tabs does not re-enumerate constraints or reset per-tab state
   5. Engine functions for sketch-wide enumeration, type grouping, and type filtering pass unit tests outside Fusion
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Extend constraint engine with sketch-wide functions (TDD)
-- [ ] 01-02-PLAN.md — Migrate to three-tab dialog, preserve v1.1 Selected Entities behavior
+- [x] 01-02-PLAN.md — Migrate to three-tab dialog, preserve v1.1 Selected Entities behavior
 
 **UI hint**: yes
 
@@ -68,6 +68,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine and Tab Foundation | 0/2 | Planning complete | - |
+| 1. Engine and Tab Foundation | 2/2 | Complete   | 2026-03-23 |
 | 2. Constraint Types Tab | 0/? | Not started | - |
 | 3. All Constraints Tab | 0/? | Not started | - |

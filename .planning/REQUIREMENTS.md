@@ -9,10 +9,10 @@ Requirements for v2.0 release. Each maps to roadmap phases.
 
 ### Tab Infrastructure
 
-- [ ] **TABS-01**: Command dialog displays three tabs: Selected Entities, Constraint Types, All Constraints
-- [ ] **TABS-02**: Tab switching preserves per-tab state without re-enumeration
-- [ ] **TABS-03**: Per-tab state isolation — each tab maintains its own constraint list independently
-- [ ] **TABS-04**: Handler GC protection utility to prevent garbage collection of event handlers across all tabs
+- [x] **TABS-01**: Command dialog displays three tabs: Selected Entities, Constraint Types, All Constraints
+- [x] **TABS-02**: Tab switching preserves per-tab state without re-enumeration
+- [x] **TABS-03**: Per-tab state isolation — each tab maintains its own constraint list independently
+- [x] **TABS-04**: Handler GC protection utility to prevent garbage collection of event handlers across all tabs
 
 ### Constraint Types Tab
 
@@ -34,8 +34,8 @@ Requirements for v2.0 release. Each maps to roadmap phases.
 
 ### Selected Entities Tab
 
-- [ ] **ENTY-01**: Selected Entities tab preserves identical behavior to v1.1 — entity selection, constraint table, checkbox deletion
-- [ ] **ENTY-02**: Selected Entities tab is the default active tab on command launch
+- [x] **ENTY-01**: Selected Entities tab preserves identical behavior to v1.1 — entity selection, constraint table, checkbox deletion
+- [x] **ENTY-02**: Selected Entities tab is the default active tab on command launch
 
 ### Engine
 
@@ -81,10 +81,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TABS-01 | Phase 1 | Pending |
-| TABS-02 | Phase 1 | Pending |
-| TABS-03 | Phase 1 | Pending |
-| TABS-04 | Phase 1 | Pending |
+| TABS-01 | Phase 1 | Complete |
+| TABS-02 | Phase 1 | Complete |
+| TABS-03 | Phase 1 | Complete |
+| TABS-04 | Phase 1 | Complete |
 | TYPE-01 | Phase 2 | Pending |
 | TYPE-02 | Phase 2 | Pending |
 | TYPE-03 | Phase 2 | Pending |
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALLC-05 | Phase 3 | Pending |
 | ALLC-06 | Phase 3 | Pending |
 | ALLC-07 | Phase 3 | Pending |
-| ENTY-01 | Phase 1 | Pending |
-| ENTY-02 | Phase 1 | Pending |
+| ENTY-01 | Phase 1 | Complete |
+| ENTY-02 | Phase 1 | Complete |
 | ENGN-01 | Phase 1 | Complete |
 | ENGN-02 | Phase 1 | Complete |
 | ENGN-03 | Phase 1 | Complete |
