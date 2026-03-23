@@ -81,34 +81,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TABS-01 | — | Pending |
-| TABS-02 | — | Pending |
-| TABS-03 | — | Pending |
-| TABS-04 | — | Pending |
-| TYPE-01 | — | Pending |
-| TYPE-02 | — | Pending |
-| TYPE-03 | — | Pending |
-| TYPE-04 | — | Pending |
-| TYPE-05 | — | Pending |
-| ALLC-01 | — | Pending |
-| ALLC-02 | — | Pending |
-| ALLC-03 | — | Pending |
-| ALLC-04 | — | Pending |
-| ALLC-05 | — | Pending |
-| ALLC-06 | — | Pending |
-| ALLC-07 | — | Pending |
-| ENTY-01 | — | Pending |
-| ENTY-02 | — | Pending |
-| ENGN-01 | — | Pending |
-| ENGN-02 | — | Pending |
-| ENGN-03 | — | Pending |
-| ENGN-04 | — | Pending |
+| TABS-01 | Phase 1 | Pending |
+| TABS-02 | Phase 1 | Pending |
+| TABS-03 | Phase 1 | Pending |
+| TABS-04 | Phase 1 | Pending |
+| TYPE-01 | Phase 2 | Pending |
+| TYPE-02 | Phase 2 | Pending |
+| TYPE-03 | Phase 2 | Pending |
+| TYPE-04 | Phase 2 | Pending |
+| TYPE-05 | Phase 2 | Pending |
+| ALLC-01 | Phase 3 | Pending |
+| ALLC-02 | Phase 3 | Pending |
+| ALLC-03 | Phase 3 | Pending |
+| ALLC-04 | Phase 3 | Pending |
+| ALLC-05 | Phase 3 | Pending |
+| ALLC-06 | Phase 3 | Pending |
+| ALLC-07 | Phase 3 | Pending |
+| ENTY-01 | Phase 1 | Pending |
+| ENTY-02 | Phase 1 | Pending |
+| ENGN-01 | Phase 1 | Pending |
+| ENGN-02 | Phase 1 | Pending |
+| ENGN-03 | Phase 1 | Pending |
+| ENGN-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after initial definition*
+*Last updated: 2026-03-22 after roadmap creation*
