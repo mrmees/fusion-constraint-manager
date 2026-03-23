@@ -19,16 +19,19 @@ Users can see and manage every constraint in a sketch without guessing, clicking
 - ✓ Related entity display for each constraint — v1.0
 - ✓ Toolbar button in DESIGN workspace with proper lifecycle — v1.0
 - ✓ Entity token re-resolution for safe deletion across event boundaries — v1.1
+- ✓ Three-tab command dialog (Selected Entities, Constraint Types, All Constraints) — Phase 1
+- ✓ Selected Entities tab preserves v1 behavior exactly — Phase 1
+- ✓ Sketch-wide constraint enumeration engine — Phase 1
+- ✓ Type grouping/counting/filtering engine functions — Phase 1
+- ✓ Per-tab state isolation and wire_handler GC utility — Phase 1
 
 ### Active
 
-- [ ] Three-tab command dialog (Selected Entities, Constraint Types, All Constraints)
 - [ ] **Constraint Types tab**: Summary table showing each constraint type, count, and "Delete All" action for the active sketch
 - [ ] **All Constraints tab**: Full list of every constraint in the active sketch with explicit "Load" button
 - [ ] **All Constraints tab**: Type column (sortable) for each constraint row
 - [ ] **All Constraints tab**: Dropdown filter by constraint type
 - [ ] **All Constraints tab**: Checkbox selection + delete for individual constraints
-- [ ] **Selected Entities tab**: Preserve current v1 behavior exactly
 
 ### Out of Scope
 
@@ -88,4 +91,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after initialization*
+*Last updated: 2026-03-23 after Phase 1 completion*
